@@ -1,0 +1,127 @@
+using FinanceApp.Data;
+using FinanceApp.Interfaces;
+using FinanceApp.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace FinanceApp.Repositories
+{
+    public class TransactionRepository : ITransactionRepository
+    {
+        private readonly FinanceDbContext _context;
+
+        public TransactionRepository(FinanceDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate)
+        {
+            var query = _context.Transactions
+                .WithPartitionKey(userId)
+                .AsQueryable();
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(t => t.Date >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(t => t.Date <= endDate.Value);
+            }
+
+            var transactions = await query.OrderByDescending(t => t.Date).ToListAsync();
+            
+            var transactionIds = transactions.Select(t => t.Id).ToList();
+            if (transactionIds.Any())
+            {
+                var entries = await _context.LedgerEntries
+                    .WithPartitionKey(userId)
+                    .Where(e => transactionIds.Contains(e.TransactionId))
+                    .ToListAsync();
+                    
+                foreach (var t in transactions)
+                {
+                    t.Entries = entries.Where(e => e.TransactionId == t.Id).ToList();
+                }
+            }
+
+            return transactions;
+        }
+
+        public async Task<IEnumerable<Transaction>> GetTransactionsByAccountIdAsync(string userId, string accountId)
+        {
+            var entries = await _context.LedgerEntries
+                .WithPartitionKey(userId)
+                .Where(e => e.AccountId == accountId)
+                .ToListAsync();
+
+            if (!entries.Any())
+                return new List<Transaction>();
+
+            var transactionIds = entries.Select(e => e.TransactionId).Distinct().ToList();
+
+            var transactions = await _context.Transactions
+                .WithPartitionKey(userId)
+                .Where(t => transactionIds.Contains(t.Id))
+                .OrderByDescending(t => t.Date)
+                .ToListAsync();
+
+            var allEntriesForTransactions = await _context.LedgerEntries
+                .WithPartitionKey(userId)
+                .Where(e => transactionIds.Contains(e.TransactionId))
+                .ToListAsync();
+
+            foreach (var t in transactions)
+            {
+                t.Entries = allEntriesForTransactions.Where(e => e.TransactionId == t.Id).ToList();
+            }
+
+            return transactions;
+        }
+
+        public async Task<Transaction?> GetTransactionByIdAsync(string userId, string id)
+        {
+            var transaction = await _context.Transactions
+                .WithPartitionKey(userId)
+                .FirstOrDefaultAsync(t => t.Id == id);
+                
+            if (transaction != null)
+            {
+                transaction.Entries = await _context.LedgerEntries
+                    .WithPartitionKey(userId)
+                    .Where(e => e.TransactionId == id)
+                    .ToListAsync();
+            }
+            
+            return transaction;
+        }
+
+        public async Task AddTransactionAsync(Transaction transaction)
+        {
+            await _context.Transactions.AddAsync(transaction);
+            // We do not save changes automatically so services can batch it
+        }
+
+        public async Task UpdateTransactionAsync(Transaction transaction, IEnumerable<LedgerEntry> oldEntries)
+        {
+            _context.LedgerEntries.RemoveRange(oldEntries);
+            _context.Transactions.Update(transaction);
+            await Task.CompletedTask;
+        }
+
+        public async Task DeleteTransactionAsync(string userId, string id)
+        {
+            var transaction = await GetTransactionByIdAsync(userId, id);
+            if (transaction != null)
+            {
+                _context.Transactions.Remove(transaction);
+            }
+        }
+
+        public async Task SaveChangesAsync()
+        {
+            await _context.SaveChangesAsync();
+        }
+    }
+}

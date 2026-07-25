@@ -1,0 +1,265 @@
+import React, { useState } from 'react'
+import {
+  useGetAccounts,
+  useGetAccountGroups,
+  useCreateAccount,
+  useCreateAccountGroup,
+  useDeleteAccount,
+  Account,
+} from '@/hooks/useAccounts'
+import { Building2, CreditCard, Landmark, Plus, Trash2 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+
+export default function Accounts() {
+  const { data: accounts = [], isLoading: isLoadingAccounts } = useGetAccounts()
+  const { data: groups = [], isLoading: isLoadingGroups } = useGetAccountGroups()
+
+  const createAccountMutation = useCreateAccount()
+  const createGroupMutation = useCreateAccountGroup()
+  const deleteAccountMutation = useDeleteAccount()
+
+  const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupType, setNewGroupType] = useState('Asset')
+  const [showAddAccount, setShowAddAccount] = useState(false)
+  const [newAccount, setNewAccount] = useState<Account>({
+    name: '',
+    accountGroupId: '',
+    startingBalance: 0,
+    accountType: 'Bank',
+    creditCardCycleStartDay: null,
+    creditCardPaymentDueDay: null,
+  })
+
+  const handleCreateGroup = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newGroupName.trim()) return
+    createGroupMutation.mutate({ name: newGroupName.trim(), accountType: newGroupType }, {
+      onSuccess: () => setNewGroupName(''),
+    })
+  }
+
+  const handleCreateAccount = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAccount.name.trim() || !newAccount.accountGroupId) return
+    createAccountMutation.mutate(newAccount, {
+      onSuccess: () => {
+        setShowAddAccount(false)
+        setNewAccount({
+          name: '',
+          accountGroupId: '',
+          startingBalance: 0,
+          accountType: 'Bank',
+          creditCardCycleStartDay: null,
+          creditCardPaymentDueDay: null,
+        })
+      },
+    })
+  }
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'Bank':
+        return Landmark
+      case 'CreditCard':
+        return CreditCard
+      case 'Investment':
+        return Building2
+      default:
+        return Landmark
+    }
+  }
+
+  if (isLoadingAccounts || isLoadingGroups) {
+    return <div className="p-4 text-slate-500">Loading accounts...</div>
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Accounts</h1>
+      </div>
+
+      <div className="p-4 flex flex-col gap-6 max-w-md mx-auto w-full">
+        {/* Create Account Group */}
+        <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Add Account Group</h2>
+          <form onSubmit={handleCreateGroup} className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="e.g. Food & Dining, Bank Accounts"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                className="flex-1 min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+              />
+              <select
+                value={newGroupType}
+                onChange={(e) => setNewGroupType(e.target.value)}
+                className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+              >
+                <option value="Asset">Asset</option>
+                <option value="Liability">Liability</option>
+                <option value="Equity">Equity</option>
+                <option value="Adjustment">Adjustment</option>
+                <option value="Bank">Bank</option>
+                <option value="Cash">Cash</option>
+                <option value="CreditCard">Credit Card</option>
+                <option value="Investment">Investment</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg min-h-[44px] flex items-center justify-center gap-1 font-medium transition-colors"
+            >
+              <Plus className="w-5 h-5" /> Add Account Group
+            </button>
+          </form>
+        </section>
+
+        {/* Add Account Panel Toggle */}
+        {!showAddAccount ? (
+          <button
+            onClick={() => setShowAddAccount(true)}
+            className="w-full min-h-[48px] bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors"
+          >
+            <Plus className="w-5 h-5" /> Create New Account
+          </button>
+        ) : (
+          <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">New Account Details</h2>
+              <button onClick={() => setShowAddAccount(false)} className="text-xs text-rose-500 font-medium">Cancel</button>
+            </div>
+            <form onSubmit={handleCreateAccount} className="flex flex-col gap-3">
+              <input
+                type="text"
+                placeholder="Account Name (e.g. Chase checking)"
+                value={newAccount.name}
+                onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
+                required
+                className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+              />
+
+              <select
+                value={newAccount.accountGroupId}
+                onChange={(e) => {
+                  const groupId = e.target.value
+                  const group = groups.find(g => g.id === groupId)
+                  setNewAccount({ 
+                    ...newAccount, 
+                    accountGroupId: groupId,
+                    accountType: group ? group.accountType as any : 'Bank'
+                  })
+                }}
+                required
+                className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+              >
+                <option value="">Select Account Group...</option>
+                {Array.from(new Set(groups.filter(g => g.accountType !== 'Expense' && g.accountType !== 'Income').map(g => g.accountType))).sort().map(type => (
+                  <optgroup key={type} label={type}>
+                    {groups.filter(g => g.accountType === type).map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Starting Balance"
+                value={newAccount.startingBalance || ''}
+                onChange={(e) => setNewAccount({ ...newAccount, startingBalance: parseFloat(e.target.value) || 0 })}
+                className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+              />
+
+              {newAccount.accountType === 'CreditCard' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    placeholder="Billing Cycle Start Day"
+                    value={newAccount.creditCardCycleStartDay || ''}
+                    onChange={(e) => setNewAccount({ ...newAccount, creditCardCycleStartDay: parseInt(e.target.value) || null })}
+                    className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Payment Due Day"
+                    value={newAccount.creditCardPaymentDueDay || ''}
+                    onChange={(e) => setNewAccount({ ...newAccount, creditCardPaymentDueDay: parseInt(e.target.value) || null })}
+                    className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              >
+                Save Account
+              </button>
+            </form>
+          </section>
+        )}
+
+        {/* Display Accounts grouped by AccountGroups */}
+        {groups.filter(g => g.accountType !== 'Expense' && g.accountType !== 'Income').map((group) => {
+          const groupAccounts = accounts.filter((a) => a.accountGroupId === group.id)
+          return (
+            <div key={group.id} className="flex flex-col gap-2">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{group.name}</h3>
+              <div className="flex flex-col gap-2">
+                {groupAccounts.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No accounts in this group.</p>
+                ) : (
+                  groupAccounts.map((acc) => {
+                    const Icon = getIcon(acc.accountType)
+                    return (
+                      <div
+                        key={acc.id}
+                        className="bg-white dark:bg-slate-900 p-3 px-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between min-h-[64px] hover:border-blue-500 dark:hover:border-blue-500 transition-colors group relative overflow-hidden"
+                      >
+                        <Link 
+                          to="/accounts/$accountId" 
+                          params={{ accountId: acc.id! }} 
+                          className="absolute inset-0 z-0"
+                          aria-label={`View details for ${acc.name}`}
+                        />
+                        <div className="flex items-center gap-3 relative z-10 pointer-events-none">
+                          <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-blue-600 dark:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 transition-colors">
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-base font-semibold text-slate-900 dark:text-slate-50 leading-tight">
+                              {acc.name}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 relative z-10">
+                          <span
+                            className={`text-base font-bold ${
+                              (acc.currentBalance ?? 0) < 0 ? 'text-rose-500' : 'text-slate-900 dark:text-slate-50'
+                            }`}
+                          >
+                            ₱{(acc.currentBalance ?? acc.startingBalance).toFixed(2)}
+                          </span>
+                          <button
+                            onClick={(e) => { e.preventDefault(); deleteAccountMutation.mutate(acc.id!); }}
+                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                            aria-label={`Delete ${acc.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

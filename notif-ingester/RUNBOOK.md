@@ -1,0 +1,27 @@
+# Transaction Classification Runbook
+
+This document contains explicit rules and guidelines for how the AI should classify incoming notifications. 
+The AI reads this document during classification. Explicit rules here **override** the vector similarity context.
+
+## 1. General Rules
+- **Transfers**: Any notification explicitly stating money was moved between two of the user's own accounts should be classified as a `Transfer`.
+- **Double Entry**: Ensure that `debit_account_id` and `credit_account_id` always balance correctly. 
+  - For **Expenses**: Debit the Expense account, Credit the Asset (Bank/Cash) account.
+  - For **Income**: Debit the Asset (Bank/Cash) account, Credit the Income account.
+  - For **Transfers**: Debit the receiving Asset account, Credit the sending Asset account.
+
+## 2. Explicit Vendor & Category Mappings
+*(Add your specific vendors here to force the AI to categorize them exactly)*
+
+| Keywords in Notification | Vendor | Category | Transaction Type |
+| :--- | :--- | :--- | :--- |
+| `7-ELEV` , `7-Eleven` | 7-Eleven | Food & Dining | Expense |
+| `Meralco` | Meralco | Bills & Utilities | Expense |
+| `Payroll`, `Salary` | Employer | Salary | Income |
+| `GCash` (if moving from Bank) | GCash | Transfer | Transfer |
+
+## 3. Unconsidered Feedback / Future Rules
+*(This section tracks feedback or corrections from the user that have not yet been formalized into the tables above. The AI should still attempt to apply these.)*
+
+- *No unconsidered feedback currently.*
+

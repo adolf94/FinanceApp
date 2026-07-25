@@ -1,0 +1,11 @@
+azure-functions
+azure-cosmos
+google-genai
+pydantic
+python-dotenv
+pytz
+uuid7
+httpx
+numpy
+pytest
+pytest-asyncio

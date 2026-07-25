@@ -1,0 +1,14 @@
+node_modules/
+bin/
+obj/
+.env
+.env.local
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+build/
+dist/
+.DS_Store
