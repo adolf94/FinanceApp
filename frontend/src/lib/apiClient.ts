@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getUserManager } from '@adolf94/ar-auth-client'
 
 const apiClient = axios.create({
   baseURL: window.authConfig?.apiBaseUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7071/api',
@@ -8,27 +9,36 @@ const apiClient = axios.create({
 })
 
 // Auth interceptor: attach Bearer token to every request
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
   let token = localStorage.getItem('access_token')
   if (!token) {
-    const authority = window.authConfig?.authority ?? 'https://auth.adolfrey.com/api'
-    const clientId = window.authConfig?.clientId ?? 'finance-app2'
-    const authorityBase = authority.endsWith('/') ? authority : `${authority}/`
-    const keys = [
-      `oidc.user:${authorityBase}:${clientId}`,
-      `oidc.user:${authority}:${clientId}`
-    ]
-    for (const key of keys) {
-      const oidcData = localStorage.getItem(key)
-      if (oidcData) {
-        try {
-          const parsed = JSON.parse(oidcData)
-          if (parsed && parsed.access_token) {
-            token = parsed.access_token
-            break
+    try {
+      const userManager = getUserManager()
+      const user = await userManager.getUser()
+      if (user && user.access_token) {
+        token = user.access_token
+      }
+    } catch (e) {
+      // Fallback to manual local storage parsing if UserManager is not initialized yet
+      const authority = window.authConfig?.authority ?? 'https://auth.adolfrey.com/api'
+      const clientId = window.authConfig?.clientId ?? 'finance-app2'
+      const authorityBase = authority.endsWith('/') ? authority : `${authority}/`
+      const keys = [
+        `oidc.user:${authorityBase}:${clientId}`,
+        `oidc.user:${authority}:${clientId}`
+      ]
+      for (const key of keys) {
+        const oidcData = localStorage.getItem(key)
+        if (oidcData) {
+          try {
+            const parsed = JSON.parse(oidcData)
+            if (parsed && parsed.access_token) {
+              token = parsed.access_token
+              break
+            }
+          } catch (err) {
+            console.error(err)
           }
-        } catch (e) {
-          console.error(e)
         }
       }
     }
