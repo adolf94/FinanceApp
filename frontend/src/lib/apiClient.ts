@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7071/api',
+  baseURL: window.authConfig?.apiBaseUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7071/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -11,9 +11,12 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   let token = localStorage.getItem('access_token')
   if (!token) {
+    const authority = window.authConfig?.authority ?? 'https://auth.adolfrey.com/api'
+    const clientId = window.authConfig?.clientId ?? 'finance-app2'
+    const authorityBase = authority.endsWith('/') ? authority : `${authority}/`
     const keys = [
-      'oidc.user:https://auth.adolfrey.com/:finance-app2',
-      'oidc.user:https://auth.adolfrey.com/api:finance-app2'
+      `oidc.user:${authorityBase}:${clientId}`,
+      `oidc.user:${authority}:${clientId}`
     ]
     for (const key of keys) {
       const oidcData = localStorage.getItem(key)

@@ -7,3 +7,13 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+interface Window {
+  authConfig?: {
+    authority: string
+    clientId: string
+    redirectUri: string
+    scope: string
+    apiBaseUrl: string
+  }
+}
