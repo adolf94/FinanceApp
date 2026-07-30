@@ -23,7 +23,7 @@ jobs:
            
       - name: Install dependencies and build
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GH_PAT }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd frontend
           npm install

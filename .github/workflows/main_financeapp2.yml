@@ -27,7 +27,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           source-url: https://nuget.pkg.github.com/adolf94/index.json
         env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GH_PAT }}
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 'Resolve Project Dependencies Using Dotnet'
         shell: pwsh
