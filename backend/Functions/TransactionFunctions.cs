@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using FinanceApp.Interfaces;
 using FinanceApp.Models;
 using System.Text.Json;
+using FinanceApp.Extensions;
 using System.Text.Json.Serialization;
 
 namespace FinanceApp.Functions
@@ -28,9 +29,10 @@ namespace FinanceApp.Functions
 
         [Function("GetTransactions")]
         public async Task<IActionResult> GetTransactions(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "transactions")] HttpRequest req)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "transactions")] HttpRequest req, FunctionContext context)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             
             DateTime? startDate = null;
             DateTime? endDate = null;
@@ -44,16 +46,19 @@ namespace FinanceApp.Functions
                 endDate = parsedEnd;
             }
 
-            var transactions = await _transactionService.GetTransactionsAsync(userId, startDate, endDate);
+            string? accountGroupId = req.Query["accountGroupId"];
+
+            var transactions = await _transactionService.GetTransactionsAsync(userId, startDate, endDate, accountGroupId);
             return new OkObjectResult(transactions);
         }
 
         [Function("GetTransactionById")]
         public async Task<IActionResult> GetTransactionById(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "transactions/{id}")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "transactions/{id}")] HttpRequest req, FunctionContext context,
             string id)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             var transaction = await _transactionService.GetTransactionByIdAsync(userId, id);
             if (transaction == null)
             {
@@ -64,19 +69,21 @@ namespace FinanceApp.Functions
 
         [Function("GetTransactionsByAccountId")]
         public async Task<IActionResult> GetTransactionsByAccountId(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "accounts/{accountId}/transactions")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "accounts/{accountId}/transactions")] HttpRequest req, FunctionContext context,
             string accountId)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             var transactions = await _transactionService.GetTransactionsByAccountIdAsync(userId, accountId);
             return new OkObjectResult(transactions);
         }
 
         [Function("CreateTransaction")]
         public async Task<IActionResult> CreateTransaction(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "transactions")] HttpRequest req)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "transactions")] HttpRequest req, FunctionContext context)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var transaction = JsonSerializer.Deserialize<Transaction>(requestBody, _jsonOptions);
 
@@ -106,10 +113,11 @@ namespace FinanceApp.Functions
 
         [Function("UpdateTransaction")]
         public async Task<IActionResult> UpdateTransaction(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "transactions/{id}")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "transactions/{id}")] HttpRequest req, FunctionContext context,
             string id)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var transaction = JsonSerializer.Deserialize<Transaction>(requestBody, _jsonOptions);
 
@@ -140,10 +148,11 @@ namespace FinanceApp.Functions
 
         [Function("DeleteTransaction")]
         public async Task<IActionResult> DeleteTransaction(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "transactions/{id}")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "transactions/{id}")] HttpRequest req, FunctionContext context,
             string id)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             try
             {
                 await _transactionService.DeleteTransactionAsync(userId, id);
@@ -156,3 +165,4 @@ namespace FinanceApp.Functions
         }
     }
 }
+

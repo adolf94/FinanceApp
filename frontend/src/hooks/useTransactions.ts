@@ -17,12 +17,12 @@ export interface Transaction {
   entries: LedgerEntry[]
 }
 
-export function useGetTransactions(startDate?: string, endDate?: string) {
+export function useGetTransactions(startDate?: string, endDate?: string, accountGroupId?: string) {
   return useQuery<Transaction[]>({
-    queryKey: ['transactions', startDate, endDate],
+    queryKey: ['transactions', startDate, endDate, accountGroupId],
     queryFn: async () => {
       const response = await apiClient.get('/transactions', {
-        params: { startDate, endDate },
+        params: { startDate, endDate, accountGroupId },
       })
       return response.data
     },

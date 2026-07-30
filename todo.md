@@ -12,9 +12,9 @@ Based on the `spec.md`, the following features are pending implementation:
 
 ## 2. Category History View (Section 2.7)
 **Description:** Drill-down view for transactions tied to a specific primary group or specific selection.
-- [ ] **Frontend:** Create a `CategoryDetails.tsx` page (similar to `AccountDetails.tsx`).
-- [ ] **Frontend:** Link to this page from the Analysis charts or a dedicated categories list.
-- [ ] **Backend:** Ensure `GET /transactions` supports filtering by `AccountGroupId` (if not already supported).
+- [x] **Frontend:** Create a `CategoryDetails.tsx` page (similar to `AccountDetails.tsx`).
+- [x] **Frontend:** Link to this page from the Analysis charts or a dedicated categories list.
+- [x] **Backend:** Ensure `GET /transactions` supports filtering by `AccountGroupId` (if not already supported).
 
 ## 3. Custom Billing Cycles / Statement Cut-off (Section 2.7)
 **Description:** Account History view should support custom billing cycles (Statement Cut-off Date) for credit cards.

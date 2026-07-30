@@ -14,7 +14,7 @@ namespace FinanceApp.Repositories
             _context = context;
         }
 
-        public async Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate)
+        public async Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate, string? accountGroupId = null)
         {
             var query = _context.Transactions
                 .WithPartitionKey(userId)
@@ -30,14 +30,41 @@ namespace FinanceApp.Repositories
                 query = query.Where(t => t.Date <= endDate.Value);
             }
 
+            if (!string.IsNullOrEmpty(accountGroupId))
+            {
+                var accountIds = await _context.Accounts
+                    .WithPartitionKey(userId)
+                    .Where(a => a.AccountGroupId == accountGroupId)
+                    .Select(a => a.Id)
+                    .ToListAsync();
+
+                if (!accountIds.Any())
+                {
+                    return new List<Transaction>();
+                }
+
+                var ledgerEntriesForGroup = await _context.LedgerEntries
+                    .WithPartitionKey(userId)
+                    .Where(e => accountIds.Contains(e.AccountId))
+                    .ToListAsync();
+
+                if (!ledgerEntriesForGroup.Any())
+                {
+                    return new List<Transaction>();
+                }
+
+                var transactionIds = ledgerEntriesForGroup.Select(e => e.TransactionId).Distinct().ToList();
+                query = query.Where(t => transactionIds.Contains(t.Id));
+            }
+
             var transactions = await query.OrderByDescending(t => t.Date).ToListAsync();
             
-            var transactionIds = transactions.Select(t => t.Id).ToList();
-            if (transactionIds.Any())
+            var allTxIds = transactions.Select(t => t.Id).ToList();
+            if (allTxIds.Any())
             {
                 var entries = await _context.LedgerEntries
                     .WithPartitionKey(userId)
-                    .Where(e => transactionIds.Contains(e.TransactionId))
+                    .Where(e => allTxIds.Contains(e.TransactionId))
                     .ToListAsync();
                     
                 foreach (var t in transactions)

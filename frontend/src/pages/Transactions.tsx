@@ -6,6 +6,7 @@ import dayjs from 'dayjs'
 import AddTransactionModal from '@/components/AddTransactionModal'
 import CalendarView from '@/pages/CalendarView'
 import RecurringTransactionsList from '@/components/RecurringTransactionsList'
+import ConfirmationModal from '@/components/ui/ConfirmationModal'
 
 type ViewMode = 'daily' | 'month' | 'recurring'
 
@@ -21,6 +22,7 @@ export default function Transactions() {
   const deleteMutation = useDeleteTransaction()
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null)
 
   const getAccountName = (id: string) => {
     return accounts.find(a => a.id === id)?.name ?? 'Unknown Account'
@@ -185,7 +187,10 @@ export default function Transactions() {
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(tx.id!); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteCandidate(tx.id!);
+                                }}
                                 className="p-2 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
                                 aria-label="Delete transaction"
                               >
@@ -233,6 +238,19 @@ export default function Transactions() {
         isOpen={!!editingTx}
         onClose={() => setEditingTx(null)}
         initialData={editingTx}
+      />
+
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        title="Delete Transaction"
+        message="Are you sure you want to delete this transaction? This action is permanent and cannot be undone."
+        onConfirm={() => {
+          if (deleteCandidate) {
+            deleteMutation.mutate(deleteCandidate)
+            setDeleteCandidate(null)
+          }
+        }}
+        onCancel={() => setDeleteCandidate(null)}
       />
     </div>
   )

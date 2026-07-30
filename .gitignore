@@ -12,3 +12,5 @@ obj/
 build/
 dist/
 .DS_Store
+nuget.config
+.npmrc

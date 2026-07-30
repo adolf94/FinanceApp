@@ -4,7 +4,7 @@ namespace FinanceApp.Interfaces
 {
     public interface ITransactionService
     {
-        Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate);
+        Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate, string? accountGroupId = null);
         Task<IEnumerable<Transaction>> GetTransactionsByAccountIdAsync(string userId, string accountId);
         Task<Transaction?> GetTransactionByIdAsync(string userId, string id);
         Task<Transaction> CreateTransactionAsync(string userId, Transaction transaction);

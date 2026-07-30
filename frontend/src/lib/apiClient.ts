@@ -9,7 +9,27 @@ const apiClient = axios.create({
 
 // Auth interceptor: attach Bearer token to every request
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
+  let token = localStorage.getItem('access_token')
+  if (!token) {
+    const keys = [
+      'oidc.user:https://auth.adolfrey.com/:finance-app2',
+      'oidc.user:https://auth.adolfrey.com/api:finance-app2'
+    ]
+    for (const key of keys) {
+      const oidcData = localStorage.getItem(key)
+      if (oidcData) {
+        try {
+          const parsed = JSON.parse(oidcData)
+          if (parsed && parsed.access_token) {
+            token = parsed.access_token
+            break
+          }
+        } catch (e) {
+          console.error(e)
+        }
+      }
+    }
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }

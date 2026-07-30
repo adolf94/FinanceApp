@@ -8,24 +8,6 @@ import { uuidv7 } from 'uuidv7'
 import Combobox from './ui/Combobox'
 import CalculatorInput from './ui/CalculatorInput'
 
-const PRESET_VENDORS = [
-  'Amazon',
-  'Walmart',
-  'Target',
-  'Starbucks',
-  'Uber',
-  'Lyft',
-  'Netflix',
-  'Apple',
-  'Google',
-  "McDonald's",
-  'Costco',
-  'Shell',
-  'Local Store',
-  'Utility Company',
-  'Other / Custom',
-]
-
 const generateId = () => uuidv7()
 
 interface SplitLine {
@@ -164,9 +146,7 @@ export default function AddTransactionModal({ isOpen, onClose, initialData }: Ad
   }, [isOpen, initialData])
 
   // Combine DB Vendors with presets - memoized for performance
-  const vendorOptions = useMemo(() => Array.from(
-    new Set([...dbVendors.map((v) => v.name), ...PRESET_VENDORS])
-  ), [dbVendors])
+  const vendorOptions = useMemo(() => dbVendors.map((v) => v.name), [dbVendors])
 
   // Payment Source Accounts (Asset / Bank / Cash / CreditCard / Investment)
   const paymentGroupIds = useMemo(() => new Set(
@@ -443,7 +423,6 @@ export default function AddTransactionModal({ isOpen, onClose, initialData }: Ad
                   value={totalAmount}
                   onChange={setTotalAmount}
                   required
-                  iconSize={8}
                   className="w-full text-3xl font-bold text-center py-2 border-b border-slate-200 dark:border-slate-800 bg-transparent text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-600"
                 />
               </div>

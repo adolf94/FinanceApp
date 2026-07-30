@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import dayjs from 'dayjs'
 import { useAnalysis } from '@/hooks/useAnalysis'
+import { Link } from '@tanstack/react-router'
 import { Loader2, TrendingUp, Target, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   PieChart,
@@ -20,7 +21,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 export default function Analysis() {
   const [selectedMonth, setSelectedMonth] = useState(dayjs())
-  const { spendingByCategoryChartData, monthlyBarChartData, goalProgress, isLoading } = useAnalysis(selectedMonth)
+  const { spendingByCategoryChartData, categoryGroupBreakdown, monthlyBarChartData, goalProgress, isLoading } = useAnalysis(selectedMonth)
 
   if (isLoading) {
     return (
@@ -105,6 +106,47 @@ export default function Analysis() {
           </div>
         )}
       </section>
+
+      {/* Spending Breakdown List */}
+      {categoryGroupBreakdown && categoryGroupBreakdown.length > 0 && (
+        <section className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50 mb-4">Spending Breakdown</h2>
+          <div className="flex flex-col gap-4">
+            {categoryGroupBreakdown.map((group) => (
+              <div key={group.id} className="border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0 last:pb-0">
+                <div className="flex justify-between items-center mb-2">
+                  <Link 
+                    to="/categories/$categoryId" 
+                    params={{ categoryId: group.id }}
+                    className="font-semibold text-slate-900 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  >
+                    {group.name}
+                  </Link>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    ₱{group.total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="pl-4 flex flex-col gap-1.5 border-l border-slate-100 dark:border-slate-800 ml-1">
+                  {group.subcategories.map((sub) => (
+                    <div key={sub.id} className="flex justify-between items-center text-sm">
+                      <Link
+                        to="/accounts/$accountId"
+                        params={{ accountId: sub.id }}
+                        className="text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                      >
+                        {sub.name}
+                      </Link>
+                      <span className="text-slate-600 dark:text-slate-400">
+                        ₱{sub.total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Income vs Expense Bar Chart */}
       <section className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">

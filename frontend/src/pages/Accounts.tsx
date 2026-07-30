@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useAccounts'
 import { Building2, CreditCard, Landmark, Plus, Trash2 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
+import ConfirmationModal from '@/components/ui/ConfirmationModal'
 
 export default function Accounts() {
   const { data: accounts = [], isLoading: isLoadingAccounts } = useGetAccounts()
@@ -29,6 +30,7 @@ export default function Accounts() {
     creditCardCycleStartDay: null,
     creditCardPaymentDueDay: null,
   })
+  const [deleteCandidate, setDeleteCandidate] = useState<{ id: string, name: string } | null>(null)
 
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault()
@@ -244,7 +246,10 @@ export default function Accounts() {
                             ₱{(acc.currentBalance ?? acc.startingBalance).toFixed(2)}
                           </span>
                           <button
-                            onClick={(e) => { e.preventDefault(); deleteAccountMutation.mutate(acc.id!); }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setDeleteCandidate({ id: acc.id!, name: acc.name });
+                            }}
                             className="p-2 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
                             aria-label={`Delete ${acc.name}`}
                           >
@@ -260,6 +265,19 @@ export default function Accounts() {
           )
         })}
       </div>
+
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        title="Delete Account"
+        message={`Are you sure you want to delete the account "${deleteCandidate?.name}"? All transaction logs associated with this account may be impacted.`}
+        onConfirm={() => {
+          if (deleteCandidate) {
+            deleteAccountMutation.mutate(deleteCandidate.id)
+            setDeleteCandidate(null)
+          }
+        }}
+        onCancel={() => setDeleteCandidate(null)}
+      />
     </div>
   )
 }

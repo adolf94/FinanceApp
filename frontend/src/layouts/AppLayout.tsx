@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from '@tanstack/react-router'
-import { LayoutDashboard, ArrowLeftRight, Wallet, Settings, Plus } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Wallet, Settings, Plus, LogOut } from 'lucide-react'
 import AddTransactionModal from '@/components/AddTransactionModal'
+import { useAuth } from '@adolf94/ar-auth-client'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -11,14 +12,53 @@ const navItems = [
 ]
 
 export default function AppLayout() {
+  const { isAuthenticated, isLoading, login, logout, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
 
   const [isModalOpen, setIsModalOpen] = useState(false)
 
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      login({ useRedirect: true })
+    }
+  }, [isLoading, isAuthenticated, login])
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-lg font-medium text-slate-400">Authenticating...</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full max-w-5xl mx-auto relative bg-slate-50 dark:bg-slate-950">
+      <header className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          {user?.picture ? (
+            <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm">
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
+            </div>
+          )}
+          <span className="font-medium text-slate-900 dark:text-slate-100">{user?.name || 'User'}</span>
+        </div>
+        <button
+          onClick={() => logout()}
+          aria-label="Logout"
+          className="flex items-center gap-2 text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Logout</span>
+        </button>
+      </header>
+
       <main className="flex-1 overflow-y-auto pb-20">
         <Outlet />
       </main>

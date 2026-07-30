@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Plus, Trash2, Tag, Store } from 'lucide-react'
+import ConfirmationModal from '@/components/ui/ConfirmationModal'
 import {
   useGetAccountGroups,
   useCreateAccountGroup,
@@ -71,6 +72,8 @@ function CategoriesSettings() {
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupType, setNewGroupType] = useState<'Expense' | 'Income'>('Expense')
   const [newAccountNames, setNewAccountNames] = useState<Record<string, string>>({})
+  const [deleteGroupCandidate, setDeleteGroupCandidate] = useState<{ id: string, name: string } | null>(null)
+  const [deleteAccountCandidate, setDeleteAccountCandidate] = useState<{ id: string, name: string } | null>(null)
 
   const categoryGroups = groups.filter((g) => g.accountType === 'Expense' || g.accountType === 'Income')
 
@@ -139,7 +142,7 @@ function CategoriesSettings() {
                   <span className="font-semibold text-slate-900 dark:text-slate-50">{group.name}</span>
                 </div>
                 <button
-                  onClick={() => deleteGroup.mutate(group.id)}
+                  onClick={() => setDeleteGroupCandidate({ id: group.id, name: group.name })}
                   className="text-slate-400 hover:text-rose-500 transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -151,7 +154,7 @@ function CategoriesSettings() {
                   <div key={acc.id} className="flex justify-between items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg group">
                     <span className="text-slate-700 dark:text-slate-300 text-sm">{acc.name}</span>
                     <button
-                      onClick={() => deleteAccount.mutate(acc.id!)}
+                      onClick={() => setDeleteAccountCandidate({ id: acc.id!, name: acc.name })}
                       className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -176,6 +179,32 @@ function CategoriesSettings() {
           )
         })}
       </div>
+
+      <ConfirmationModal
+        isOpen={!!deleteGroupCandidate}
+        title="Delete Category Group"
+        message={`Are you sure you want to delete the category group "${deleteGroupCandidate?.name}"? All sub-categories under it will also be deleted.`}
+        onConfirm={() => {
+          if (deleteGroupCandidate) {
+            deleteGroup.mutate(deleteGroupCandidate.id)
+            setDeleteGroupCandidate(null)
+          }
+        }}
+        onCancel={() => setDeleteGroupCandidate(null)}
+      />
+
+      <ConfirmationModal
+        isOpen={!!deleteAccountCandidate}
+        title="Delete Sub-category"
+        message={`Are you sure you want to delete the sub-category "${deleteAccountCandidate?.name}"?`}
+        onConfirm={() => {
+          if (deleteAccountCandidate) {
+            deleteAccount.mutate(deleteAccountCandidate.id)
+            setDeleteAccountCandidate(null)
+          }
+        }}
+        onCancel={() => setDeleteAccountCandidate(null)}
+      />
     </div>
   )
 }
@@ -186,6 +215,7 @@ function VendorsSettings() {
   const deleteVendor = useDeleteVendor()
 
   const [newVendorName, setNewVendorName] = useState('')
+  const [deleteCandidate, setDeleteCandidate] = useState<{ id: string, name: string } | null>(null)
 
   const handleCreateVendor = (e: React.FormEvent) => {
     e.preventDefault()
@@ -220,7 +250,7 @@ function VendorsSettings() {
             <div key={vendor.id} className="flex justify-between items-center p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 group">
               <span className="font-medium text-slate-900 dark:text-slate-50">{vendor.name}</span>
               <button
-                onClick={() => deleteVendor.mutate(vendor.id!)}
+                onClick={() => setDeleteCandidate({ id: vendor.id!, name: vendor.name })}
                 className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
               >
                 <Trash2 className="w-4 h-4" />
@@ -232,6 +262,19 @@ function VendorsSettings() {
           )}
         </div>
       </div>
+
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        title="Delete Vendor"
+        message={`Are you sure you want to delete the vendor "${deleteCandidate?.name}"?`}
+        onConfirm={() => {
+          if (deleteCandidate) {
+            deleteVendor.mutate(deleteCandidate.id)
+            setDeleteCandidate(null)
+          }
+        }}
+        onCancel={() => setDeleteCandidate(null)}
+      />
     </div>
   )
 }

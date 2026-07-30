@@ -14,9 +14,9 @@ namespace FinanceApp.Services
             _accountRepository = accountRepository;
         }
 
-        public async Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate)
+        public async Task<IEnumerable<Transaction>> GetTransactionsAsync(string userId, DateTime? startDate, DateTime? endDate, string? accountGroupId = null)
         {
-            return await _transactionRepository.GetTransactionsAsync(userId, startDate, endDate);
+            return await _transactionRepository.GetTransactionsAsync(userId, startDate, endDate, accountGroupId);
         }
 
         public async Task<IEnumerable<Transaction>> GetTransactionsByAccountIdAsync(string userId, string accountId)

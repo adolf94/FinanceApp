@@ -5,6 +5,7 @@ import Transactions from '@/pages/Transactions'
 import Accounts from '@/pages/Accounts'
 import AccountDetails from '@/pages/AccountDetails'
 import Settings from '@/pages/Settings'
+import CategoryDetails from '@/pages/CategoryDetails'
 
 // Root layout route
 const rootRoute = createRootRoute({
@@ -39,6 +40,12 @@ const accountDetailsRoute = createRoute({
   }
 })
 
+const categoryDetailsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/categories/$categoryId',
+  component: () => <CategoryDetails />
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -51,6 +58,7 @@ const routeTree = rootRoute.addChildren([
   transactionsRoute,
   accountsRoute,
   accountDetailsRoute,
+  categoryDetailsRoute,
   settingsRoute,
 ])
 

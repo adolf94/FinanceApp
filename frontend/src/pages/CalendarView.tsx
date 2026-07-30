@@ -20,9 +20,7 @@ interface CalendarViewProps {
 
 function fmt(n: number) {
   if (n === 0) return null
-  if (n >= 10000) return `₱${(n / 1000).toFixed(0)}k`
-  if (n >= 1000) return `₱${(n / 1000).toFixed(1)}k`
-  return `₱${n.toFixed(0)}`
+  return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

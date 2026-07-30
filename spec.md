@@ -61,10 +61,10 @@ Users need a structured way to mirror their real-world financial accounts within
   - Closes on X button or backdrop tap.
 
 ### 2.7. Specific History Views (Drill-Downs)
-- **Account History:** Transactions tied to a specific account with a running balance. For Credit Cards, standard chronological daily groupings are further segmented with visual Statement Cycle boundaries based on the `CreditCardCycleStartDay` (e.g. "STATEMENT: JUL 15 - AUG 14").
-- **Category History:** Transactions tied to a specific primary group or specific selection.
+- **Account History:** Transactions tied to a specific account with a running balance. For Credit Cards, standard chronological daily groupings are further segmented with visual Statement Cycle boundaries based on the `CreditCardCycleStartDay` (e.g. "STATEMENT: JUL 15 - AUG 14- **Category History:** Drill-down view for transactions tied to a specific primary group (Category Group / `AccountGroup`) accessed via `/categories/$categoryId` or a specific selection (Sub-category / `Account`) accessed via `/accounts/$accountId`. The Category Group details view displays transactions grouped by day, displaying subcategories and impact amount.
+- **Analysis Integration:** The Analysis dashboard displays a spending breakdown list under the pie chart; clicking a Category Group redirects to `/categories/$categoryId`, and clicking a Sub-category redirects to `/accounts/$accountId`.
 
-### 2.8. Analysis & Insights
+## 2.8. Analysis & Insights
 - **Goal Tracking:** Track progress towards savings goals.
 - **Visualizations:** Charts/graphs for spending by category and cash flow (e.g., Recharts).
 - **Dynamic Context:** Includes a month ticker to dynamically filter and calculate spending charts and cash flow based on the specifically selected month.
@@ -101,6 +101,7 @@ Users need a structured way to mirror their real-world financial accounts within
   - Enums (`AccountType`, `TransactionType`) are decorated with `[JsonConverter(typeof(JsonStringEnumConverter))]` and processed with custom `JsonSerializerOptions` to support string enum values in HTTP JSON payloads.
   - EF Core model configuration uses `.HasConversion<string>()` in `FinanceDbContext` to store enums as human-readable string values in Cosmos DB documents.
 - **Transaction Updates:** To maintain double-entry accounting integrity, updating a transaction explicitly removes existing `LedgerEntry` child records and inserts replacements, seamlessly reversing and reapplying account balance impacts atomically.
+- **API Filtering:** `GET /transactions` accepts an optional `accountGroupId` query parameter, filtering transactions to those having entries matching any subcategories under the specified account group.
 - **Testing:** `backend.Tests` xUnit project utilizing `Moq` for unit testing service business logic and `System.Text.Json` model serialization.
 
 ### 4.3 Frontend Design (React + Vite)
@@ -114,11 +115,13 @@ Users need a structured way to mirror their real-world financial accounts within
   - `Transactions.tsx` — Monthly transaction page. Houses a **Daily | Month** tab switcher. The Daily tab renders the existing chronological list; the Month tab renders `CalendarView`.
   - `CalendarView.tsx` (`pages/`) — 42-cell (6×7) calendar grid. Accepts `transactions[]` and `accounts[]` as props (already fetched by the parent). Computes per-day income/expense summaries using the account-type driven rule (see §2.6). Opens `DayModal` on day tap.
   - `DayModal.tsx` (`components/`) — Bottom-sheet modal displaying day-level Income/Expense/Net summary chips and a scrollable transaction list for the selected date.
+  - `CategoryDetails.tsx` (`pages/`) — Detail page displaying category group name, type, and transaction list grouped by date.
 - **Account Interface (`useAccounts.ts`):** The `Account.accountType` field uses the full enum union matching the backend: `'Cash' | 'Bank' | 'CreditCard' | 'Investment' | 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense' | 'Adjustment'`. This is required for the calendar to identify income/expense accounts during per-day aggregation.
 
 ### 4.4 API Design Guidelines
 - **Version:** API v1.
-- **Authentication:** OAuth via `@adolf94/ar-auth-client`.
+- **Authentication:** OAuth via `@adolf94/ar-auth-client` on the frontend.
+- **Backend Authentication:** JWT validation and authorization via the `Ar.Auth.OpenId.AzureFunctions` middleware.
 - **Error Handling:** Consistent response envelopes for all errors.
 
 ### 4.5 Notification Ingester (Python Azure Functions)

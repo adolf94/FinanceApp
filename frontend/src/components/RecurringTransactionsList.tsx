@@ -3,12 +3,14 @@ import { useGetRecurringTransactions, useDeleteRecurringTransaction } from '@/ho
 import { Plus, Trash2, CalendarDays, ArrowRightLeft, ArrowUpRight, ArrowDownRight, RotateCw } from 'lucide-react'
 import dayjs from 'dayjs'
 import AddTransactionModal from './AddTransactionModal'
+import ConfirmationModal from './ui/ConfirmationModal'
 
 export default function RecurringTransactionsList() {
   const { data: recurringTransactions = [], isLoading } = useGetRecurringTransactions()
   const deleteMutation = useDeleteRecurringTransaction()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null)
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -86,9 +88,7 @@ export default function RecurringTransactionsList() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (window.confirm('Delete this recurring schedule?')) {
-                      if (tx.id) deleteMutation.mutate(tx.id)
-                    }
+                    if (tx.id) setDeleteCandidate(tx.id)
                   }}
                   className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-full transition-colors"
                 >
@@ -134,6 +134,19 @@ export default function RecurringTransactionsList() {
       )}
 
       <AddTransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+      <ConfirmationModal
+        isOpen={!!deleteCandidate}
+        title="Delete Recurring Schedule"
+        message="Are you sure you want to delete this recurring schedule? This will stop future automatic transaction generation."
+        onConfirm={() => {
+          if (deleteCandidate) {
+            deleteMutation.mutate(deleteCandidate)
+            setDeleteCandidate(null)
+          }
+        }}
+        onCancel={() => setDeleteCandidate(null)}
+      />
     </div>
   )
 }

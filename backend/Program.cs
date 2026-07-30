@@ -7,10 +7,27 @@ using FinanceApp.Data;
 using FinanceApp.Interfaces;
 using FinanceApp.Repositories;
 using FinanceApp.Services;
+using Ar.Auth.OpenId;
+using Ar.Auth.OpenId.AzureFunctions;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
+
+builder.Services.AddSingleton(new ArAuthOptions
+{
+    Authority = "https://auth.adolfrey.com/api",
+    ClientId = "finance-app2"
+});
+builder.Services.AddSingleton(new ArAuthMiddlewareOptions());
+builder.Services.AddSingleton<IArAuthClient>(sp =>
+{
+    var httpClientFactory = sp.GetService<IHttpClientFactory>();
+    var httpClient = httpClientFactory?.CreateClient("ArAuth") ?? new HttpClient();
+    return new ArAuthClient(sp.GetRequiredService<ArAuthOptions>(), httpClient);
+});
+
+builder.UseMiddleware<ArAuthMiddleware>();
 
 // Register DbContext with Cosmos DB provider using the ServiceProvider to get IConfiguration
 builder.Services.AddDbContext<FinanceDbContext>((provider, options) =>

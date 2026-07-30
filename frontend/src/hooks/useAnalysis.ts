@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
-import { useGetAccounts } from './useAccounts'
+import { useGetAccounts, useGetAccountGroups } from './useAccounts'
 import { useGetTransactions } from './useTransactions'
 import dayjs from 'dayjs'
 
 export function useAnalysis(selectedMonth: dayjs.Dayjs = dayjs()) {
   const { data: accounts = [], isLoading: isLoadingAccounts } = useGetAccounts()
+  const { data: accountGroups = [], isLoading: isLoadingGroups } = useGetAccountGroups()
   
   // Fetch transactions for the 6 months ending in the selected month
   const sixMonthsAgo = selectedMonth.subtract(5, 'month').startOf('month').format('YYYY-MM-DD')
@@ -22,8 +23,6 @@ export function useAnalysis(selectedMonth: dayjs.Dayjs = dayjs()) {
        if (assetTypes.includes(acc.accountType)) {
           netWorth += (acc.currentBalance || 0)
        } else if (liabilityTypes.includes(acc.accountType)) {
-          // Liabilities generally have negative balances if credited, or positive if we treat them mathematically.
-          // By standard double-entry accounting in this app, adding is correct.
           netWorth += (acc.currentBalance || 0)
        }
     })
@@ -36,6 +35,7 @@ export function useAnalysis(selectedMonth: dayjs.Dayjs = dayjs()) {
     const thisMonthTransactions = transactions.filter(t => dayjs(t.date).isAfter(startOfSelectedMonth) || dayjs(t.date).isSame(startOfSelectedMonth))
     
     const categorySpending: Record<string, number> = {}
+    const groupSpendingMap: Record<string, { id: string, name: string, total: number, subcategories: Record<string, { id: string, name: string, total: number }> }> = {}
     
     thisMonthTransactions.forEach(tx => {
       tx.entries.forEach(entry => {
@@ -49,8 +49,32 @@ export function useAnalysis(selectedMonth: dayjs.Dayjs = dayjs()) {
                  categorySpending[categoryName] = 0
               }
               categorySpending[categoryName] += entry.amount
+
+              const group = accountGroups.find(g => g.id === acc.accountGroupId)
+              const groupId = group?.id || 'unknown'
+              const groupName = group?.name || 'Uncategorized'
+
+              if (!groupSpendingMap[groupId]) {
+                 groupSpendingMap[groupId] = {
+                    id: groupId,
+                    name: groupName,
+                    total: 0,
+                    subcategories: {}
+                 }
+              }
+              groupSpendingMap[groupId].total += entry.amount
+
+              const subId = acc.id!
+              const subName = acc.name
+              if (!groupSpendingMap[groupId].subcategories[subId]) {
+                 groupSpendingMap[groupId].subcategories[subId] = {
+                    id: subId,
+                    name: subName,
+                    total: 0
+                 }
+              }
+              groupSpendingMap[groupId].subcategories[subId].total += entry.amount
            } else if (acc.accountType === 'Income') {
-              // Income is credited, so amount is negative
               currentMonthIncome += Math.abs(entry.amount)
            }
         }
@@ -61,6 +85,13 @@ export function useAnalysis(selectedMonth: dayjs.Dayjs = dayjs()) {
       name,
       value
     })).sort((a, b) => b.value - a.value)
+
+    const categoryGroupBreakdown = Object.values(groupSpendingMap)
+      .map(group => ({
+         ...group,
+         subcategories: Object.values(group.subcategories).sort((a, b) => b.total - a.total)
+      }))
+      .sort((a, b) => b.total - a.total)
     
     // Monthly Bar Chart Data (Last 6 Months ending in selectedMonth)
     const monthlyDataMap: Record<string, { income: number, expense: number }> = {}
@@ -97,13 +128,14 @@ export function useAnalysis(selectedMonth: dayjs.Dayjs = dayjs()) {
       currentMonthIncome,
       currentMonthExpense,
       spendingByCategoryChartData,
+      categoryGroupBreakdown,
       monthlyBarChartData,
       goalProgress: 65 // Hardcoded for now
     }
-  }, [accounts, transactions])
+  }, [accounts, accountGroups, transactions])
 
   return {
     ...analysisData,
-    isLoading: isLoadingAccounts || isLoadingTransactions
+    isLoading: isLoadingAccounts || isLoadingGroups || isLoadingTransactions
   }
 }

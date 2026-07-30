@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using FinanceApp.Interfaces;
 using FinanceApp.Models;
 using System.Text.Json;
+using FinanceApp.Extensions;
 using System.Text.Json.Serialization;
 
 namespace FinanceApp.Functions
@@ -28,18 +29,20 @@ namespace FinanceApp.Functions
 
         [Function("GetRecurringTransactions")]
         public async Task<IActionResult> GetRecurringTransactions(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "recurring-transactions")] HttpRequest req)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "recurring-transactions")] HttpRequest req, FunctionContext context)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             var transactions = await _recurringTransactionService.GetRecurringTransactionsAsync(userId);
             return new OkObjectResult(transactions);
         }
 
         [Function("GetRecurringTransactionById")]
         public async Task<IActionResult> GetRecurringTransactionById(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "recurring-transactions/{id}")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "recurring-transactions/{id}")] HttpRequest req, FunctionContext context, string id)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             var transaction = await _recurringTransactionService.GetRecurringTransactionByIdAsync(userId, id);
             
             if (transaction == null)
@@ -50,9 +53,10 @@ namespace FinanceApp.Functions
 
         [Function("CreateRecurringTransaction")]
         public async Task<IActionResult> CreateRecurringTransaction(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "recurring-transactions")] HttpRequest req)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "recurring-transactions")] HttpRequest req, FunctionContext context)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             
             try
@@ -72,9 +76,10 @@ namespace FinanceApp.Functions
 
         [Function("UpdateRecurringTransaction")]
         public async Task<IActionResult> UpdateRecurringTransaction(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "recurring-transactions/{id}")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "recurring-transactions/{id}")] HttpRequest req, FunctionContext context, string id)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             
             try
@@ -98,9 +103,10 @@ namespace FinanceApp.Functions
 
         [Function("DeleteRecurringTransaction")]
         public async Task<IActionResult> DeleteRecurringTransaction(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "recurring-transactions/{id}")] HttpRequest req, string id)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "recurring-transactions/{id}")] HttpRequest req, FunctionContext context, string id)
         {
-            string userId = "mock-user-123";
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
             await _recurringTransactionService.DeleteRecurringTransactionAsync(userId, id);
             return new NoContentResult();
         }
@@ -128,3 +134,4 @@ namespace FinanceApp.Functions
         }
     }
 }
+
