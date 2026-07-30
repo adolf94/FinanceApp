@@ -78,7 +78,7 @@ Users need a structured way to mirror their real-world financial accounts within
 
 ### 4.1 Architecture Overview
 - **Frontend:** React + Vite (SPA)
-- **Backend:** Azure Functions (.NET 9) — primary CRUD API
+- **Backend:** Azure Functions (.NET 10) — primary CRUD API
 - **Notification Ingester:** Azure Functions (Python) — AI-powered notification-to-transaction pipeline
 - **Database:** CosmosDB (NoSQL)
 - **Communication:** REST API via Axios
