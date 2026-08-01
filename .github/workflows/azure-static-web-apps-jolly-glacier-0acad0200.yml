@@ -42,7 +42,8 @@ jobs:
               "clientId": "${{ vars.VITE_OIDC_CLIENT_ID }}",
               "redirectUri": "${{ vars.VITE_OIDC_REDIRECT_URI }}",
               "scope": "${{ vars.VITE_OIDC_SCOPE }}",
-              "apiBaseUrl": "${{ vars.VITE_API_BASE }}"
+              "apiBaseUrl": "${{ vars.VITE_API_BASE }}",
+              "ingesterBaseUrl": "${{vars.VITE_INGESTER_BASE_URL}}"
             }
 
       - name: Move/Rename config.json to js
