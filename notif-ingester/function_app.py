@@ -350,6 +350,7 @@ async def GetHistoricalHooksFunction(req: func.HttpRequest) -> func.HttpResponse
                 "SELECT * FROM c "
                 "WHERE c.JsonData.action IN ('notif_post', 'sms_receive') "
                 "AND (NOT IS_DEFINED(c.Status) OR (c.Status != 'Imported' AND c.Status != 'Ignored')) "
+                "AND c.ExtractedData.success = true "
                 "ORDER BY c.Date DESC"
             )
             results = []
