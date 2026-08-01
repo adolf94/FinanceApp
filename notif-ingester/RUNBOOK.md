@@ -9,6 +9,7 @@ The AI reads this document during classification. Explicit rules here **override
   - For **Expenses**: Debit the Expense account, Credit the Asset (Bank/Cash) account.
   - For **Income**: Debit the Asset (Bank/Cash) account, Credit the Income account.
   - For **Transfers**: Debit the receiving Asset account, Credit the sending Asset account.
+- **No Raw UUIDs in Explanations**: Do NOT include raw database/account UUIDs in the `why` explanation text. Refer to accounts by their human-readable names instead.
 
 ## 2. Explicit Vendor & Category Mappings
 *(Add your specific vendors here to force the AI to categorize them exactly)*

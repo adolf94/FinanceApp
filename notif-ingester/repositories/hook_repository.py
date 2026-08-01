@@ -34,7 +34,7 @@ class CosmosHookRepository(IHookRepository):
 
     async def add_async(self, msg: PhoneHookMessage) -> PhoneHookMessage:
         container = await self._get_container()
-        await container.upsert_item(msg.model_dump(by_alias=True))
+        await container.upsert_item(msg.model_dump(by_alias=True, mode="json"))
         return msg
 
     async def get_by_notif_id_async(self, notif_id: str, month_key: str) -> Optional[PhoneHookMessage]:

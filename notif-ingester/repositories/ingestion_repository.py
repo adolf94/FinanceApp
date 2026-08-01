@@ -30,7 +30,7 @@ class CosmosIngestionRepository(IIngestionRepository):
 
     async def add_async(self, ingestion: PendingIngestion) -> PendingIngestion:
         container = await self._get_container()
-        await container.upsert_item(ingestion.model_dump(by_alias=True))
+        await container.upsert_item(ingestion.model_dump(by_alias=True, mode="json"))
         return ingestion
 
     async def get_by_id_async(self, id: str, user_id: str) -> Optional[PendingIngestion]:
@@ -43,4 +43,4 @@ class CosmosIngestionRepository(IIngestionRepository):
 
     async def update_async(self, ingestion: PendingIngestion) -> None:
         container = await self._get_container()
-        await container.upsert_item(ingestion.model_dump(by_alias=True))
+        await container.upsert_item(ingestion.model_dump(by_alias=True, mode="json"))

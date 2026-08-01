@@ -1,4 +1,5 @@
 import os
+import logging
 from models.phone_hook import PhoneHookMessage
 from models.pending_ingestion import PendingIngestion
 from models.transaction_vector import TransactionVector
@@ -25,20 +26,43 @@ class IngestionService:
         self._auto_confirm_threshold = float(os.environ.get("AUTO_CONFIRM_THRESHOLD", "0.92"))
 
     async def process_hook_async(self, hook: PhoneHookMessage) -> PendingIngestion:
+        logging.info("[process_hook_async] Starting...")
         # 1. Embed raw_msg
+        logging.info("[process_hook_async] 1. Embedding raw msg...")
         query_embedding = await self._embedding_service.embed_async(hook.raw_msg)
         
         # 2. Find similar past transactions
+        logging.info("[process_hook_async] 2. Finding similar transactions...")
         similar_vectors = await self._vector_service.find_similar_async(
             query_embedding, hook.user_id, top_k=3
         )
         top_score = similar_vectors[0][1] if similar_vectors else 0.0
 
-        # 3. Fetch accounts
+        # 3. Fetch accounts and runbook
+        logging.info("[process_hook_async] 3. Fetching accounts...")
         accounts = await self._finance_api_service.get_accounts_async(hook.user_id)
+        
+        logging.info("[process_hook_async] 3b. Fetching runbook...")
+        runbook_content = await self._finance_api_service.get_runbook_content_async(hook.user_id)
+        if not runbook_content:
+            runbook_content = self._ai_service.get_default_runbook_content()
 
         # 4. Classify via LLM
-        ai_parsed = await self._ai_service.classify_async(hook, similar_vectors, accounts)
+        logging.info("[process_hook_async] 4. Classifying via LLM...")
+        ai_parsed = await self._ai_service.classify_async(hook, similar_vectors, accounts, runbook_content)
+        
+        # 4.5 Automatically map vendor from lookups
+        lookups = [
+            getattr(ai_parsed, 'recipient_account_name', None),
+            getattr(ai_parsed, 'recipient_account_number', None),
+            getattr(ai_parsed, 'sender_account_name', None),
+            getattr(ai_parsed, 'sender_account_number', None),
+            getattr(ai_parsed, 'vendor', None),
+            getattr(ai_parsed, 'application', None)
+        ]
+        matched_vendor = await self._finance_api_service.search_vendors_by_lookups_async(hook.user_id, lookups)
+        if matched_vendor:
+            ai_parsed.vendor = matched_vendor
 
         # 5. Create PendingIngestion
         ingestion = PendingIngestion(
@@ -59,7 +83,10 @@ class IngestionService:
         )
 
         # 6. Auto-confirm logic
-        if top_score >= self._auto_confirm_threshold and ai_parsed.transaction_type:
+        if ai_parsed.is_financial is False:
+            ingestion.status = "NonFinancial"
+            ingestion.ttl = 7 * 24 * 60 * 60  # 7 days
+        elif top_score >= self._auto_confirm_threshold and ai_parsed.transaction_type:
             try:
                 tx = await self._finance_api_service.create_transaction_async(ingestion)
                 ingestion.status = "AutoConfirmed"
@@ -77,19 +104,95 @@ class IngestionService:
         # 7. Save
         return await self._repo.add_async(ingestion)
 
-    async def confirm_ingestion_async(self, ingestion_id: str, user_id: str) -> PendingIngestion:
+    async def reclassify_ingestion_async(self, ingestion_id: str, user_id: str) -> PendingIngestion:
+        """Re-run AI classification on an existing PendingIngestion."""
+        ingestion = await self._repo.get_by_id_async(ingestion_id, user_id)
+        if not ingestion:
+            raise ValueError("Ingestion not found")
+
+        # 1. Re-embed raw_msg
+        query_embedding = await self._embedding_service.embed_async(ingestion.raw_msg)
+
+        # 2. Find similar past transactions
+        similar_vectors = await self._vector_service.find_similar_async(
+            query_embedding, user_id, top_k=3
+        )
+        top_score = similar_vectors[0][1] if similar_vectors else 0.0
+
+        # 3. Fetch accounts and runbook
+        accounts = await self._finance_api_service.get_accounts_async(user_id)
+        runbook_content = await self._finance_api_service.get_runbook_content_async(user_id)
+        if not runbook_content:
+            runbook_content = self._ai_service.get_default_runbook_content()
+
+        # 4. Re-classify via LLM
+        # Build a minimal hook-like object for classification
+        from types import SimpleNamespace
+        hook_like = SimpleNamespace(
+            raw_msg=ingestion.raw_msg,
+            raw_payload=ingestion.raw_payload,
+            user_id=user_id
+        )
+        ai_parsed = await self._ai_service.classify_async(hook_like, similar_vectors, accounts, runbook_content)
+
+        # 4.5 Automatically map vendor from lookups
+        lookups = [
+            getattr(ai_parsed, 'recipient_account_name', None),
+            getattr(ai_parsed, 'recipient_account_number', None),
+            getattr(ai_parsed, 'sender_account_name', None),
+            getattr(ai_parsed, 'sender_account_number', None),
+            getattr(ai_parsed, 'vendor', None),
+            getattr(ai_parsed, 'application', None)
+        ]
+        matched_vendor = await self._finance_api_service.search_vendors_by_lookups_async(user_id, lookups)
+        if matched_vendor:
+            ai_parsed.vendor = matched_vendor
+
+        # 5. Update ingestion with new classification
+        ingestion.ai_parsed = ai_parsed
+        ingestion.similarity_score = top_score
+        ingestion.top_matches = [{
+            "vendor": v.vendor,
+            "category": v.category,
+            "score": score
+        } for v, score in similar_vectors]
+        ingestion.status = "Pending"
+
+        await self._repo.update_async(ingestion)
+        return ingestion
+
+    async def learn_ingestion_async(self, ingestion_id: str, user_id: str, user_confirmed: dict = None) -> PendingIngestion:
         ingestion = await self._repo.get_by_id_async(ingestion_id, user_id)
         if not ingestion:
             raise ValueError("Ingestion not found")
             
-        if ingestion.status in ["Confirmed", "AutoConfirmed"]:
-            return ingestion
-            
-        # Create transaction
-        tx = await self._finance_api_service.create_transaction_async(ingestion)
-        ingestion.status = "Confirmed"
-        ingestion.transaction_id = tx["id"]
+        if user_confirmed:
+            ingestion.user_confirmed = user_confirmed
         
+        # AI in the loop to update the runbook based on response, transaction data, notification etc.
+        user_why = user_confirmed.get("user_why") if user_confirmed else None
+        if user_why:
+            try:
+                logging.info(f"[confirm_ingestion_async] Running AI Runbook synthesis for user feedback...")
+                # Fetch current runbook
+                current_runbook = await self._finance_api_service.get_runbook_content_async(user_id)
+                if not current_runbook:
+                    current_runbook = self._ai_service.get_default_runbook_content()
+                
+                # Synthesize new runbook
+                updated_runbook = await self._ai_service.update_runbook_with_feedback_async(
+                    raw_msg=ingestion.raw_msg,
+                    ai_parsed=ingestion.ai_parsed.model_dump(),
+                    user_confirmed=user_confirmed,
+                    user_why=user_why,
+                    current_runbook=current_runbook
+                )
+                
+                # Save updated runbook to Cosmos DB
+                await self._finance_api_service.save_runbook_content_async(user_id, updated_runbook)
+            except Exception as e:
+                logging.error(f"Failed to update runbook with AI feedback: {e}")
+
         # Learn from it
         await self.embed_and_learn_async(ingestion)
         
@@ -102,7 +205,35 @@ class IngestionService:
         
         vendor = parsed.get("vendor", "")
         category = parsed.get("category", "")
-        embed_text = f"{vendor} {category} {parsed.get('transaction_type', '')}"
+        tx_type = parsed.get("transaction_type", "")
+        
+        # Fetch accounts to resolve human-readable names for embedding
+        debit_id = parsed.get("debit_account_id")
+        credit_id = parsed.get("credit_account_id")
+        accounts = await self._finance_api_service.get_specific_accounts_async(ingestion.user_id, [debit_id, credit_id])
+        
+        debit_name = ""
+        credit_name = ""
+        for acc in accounts:
+            if acc.get("id") == debit_id:
+                debit_name = f"{acc.get('accountGroupName', '')} {acc.get('name', '')}"
+            if acc.get("id") == credit_id:
+                credit_name = f"{acc.get('accountGroupName', '')} {acc.get('name', '')}"
+        
+        details = [
+            vendor,
+            tx_type,
+            debit_name,
+            credit_name,
+            parsed.get("recipient_account_name", ""),
+            parsed.get("recipient_account_number", ""),
+            parsed.get("sender_account_name", ""),
+            parsed.get("sender_account_number", ""),
+            parsed.get("application", "")
+        ]
+        
+        # Filter out empty strings and join
+        embed_text = " ".join([d for d in details if d and str(d).strip()])
         
         embedding = await self._embedding_service.embed_async(embed_text)
         
@@ -118,3 +249,7 @@ class IngestionService:
         )
         
         await self._vector_service.upsert_async(vector)
+
+    async def generate_account_description_async(self, user_id: str, account_name: str, account_type: str, group_name: str, context: str = "") -> str:
+        accounts = await self._finance_api_service.get_accounts_async(user_id)
+        return await self._ai_service.generate_account_description_async(account_name, account_type, group_name, accounts, context)

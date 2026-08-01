@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
 import { useGetAccounts, useGetAccountGroups } from '@/hooks/useAccounts'
 import { useGetAccountTransactions, Transaction } from '@/hooks/useTransactions'
-import { ArrowLeft, ArrowDownRight, ArrowUpRight, ArrowRightLeft, BookOpen, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowDownRight, ArrowUpRight, ArrowRightLeft, BookOpen, Pencil, Edit3 } from 'lucide-react'
 import AddTransactionModal from '@/components/AddTransactionModal'
+import EditAccountModal from '@/components/EditAccountModal'
 
 export default function AccountDetails() {
   const { accountId } = useParams({ from: '/accounts/$accountId' })
@@ -12,6 +13,7 @@ export default function AccountDetails() {
   const { data: transactions = [], isLoading: isLoadingTx } = useGetAccountTransactions(accountId)
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
+  const [isEditingAccount, setIsEditingAccount] = useState(false)
 
   const account = accounts.find(a => a.id === accountId)
   const group = groups.find((g: any) => g.id === account?.accountGroupId)
@@ -129,8 +131,15 @@ export default function AccountDetails() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">{account.name}</h1>
+          <button 
+            onClick={() => setIsEditingAccount(true)}
+            className="p-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors"
+            title="Edit Account"
+          >
+            <Edit3 className="w-4 h-4" />
+          </button>
         </div>
-        <div className="flex justify-between items-end mt-2">
+        <div className="flex justify-between items-end mt-1">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
             {group?.name || 'Account'}
           </span>
@@ -241,6 +250,11 @@ export default function AccountDetails() {
         isOpen={!!editingTx} 
         onClose={() => setEditingTx(null)} 
         initialData={editingTx} 
+      />
+      <EditAccountModal
+        isOpen={isEditingAccount}
+        onClose={() => setIsEditingAccount(false)}
+        account={account}
       />
     </div>
   )

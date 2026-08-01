@@ -39,5 +39,37 @@ namespace FinanceApp.Repositories
                 await _context.SaveChangesAsync();
             }
         }
+        public async Task EnsureLookupsAsync(string userId, string vendorId, IEnumerable<string> lookups)
+        {
+            if (lookups == null || !lookups.Any()) return;
+
+            var normalizedLookups = lookups
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Select(l => l.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            if (!normalizedLookups.Any()) return;
+
+            var existingLookups = await _context.VendorLookups
+                .WithPartitionKey(userId)
+                .Where(vl => normalizedLookups.Contains(vl.LookupValue))
+                .Select(vl => vl.LookupValue)
+                .ToListAsync();
+
+            var newLookups = normalizedLookups.Except(existingLookups).ToList();
+            if (newLookups.Any())
+            {
+                var entities = newLookups.Select(l => new VendorLookup
+                {
+                    UserId = userId,
+                    VendorId = vendorId,
+                    LookupValue = l
+                });
+
+                await _context.VendorLookups.AddRangeAsync(entities);
+                await _context.SaveChangesAsync();
+            }
+        }
     }
 }

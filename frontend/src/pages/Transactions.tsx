@@ -8,6 +8,7 @@ import CalendarView from '@/pages/CalendarView'
 import RecurringTransactionsList from '@/components/RecurringTransactionsList'
 import ConfirmationModal from '@/components/ui/ConfirmationModal'
 
+
 type ViewMode = 'daily' | 'month' | 'recurring'
 
 export default function Transactions() {
@@ -23,6 +24,8 @@ export default function Transactions() {
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null)
+  
+
 
   const getAccountName = (id: string) => {
     return accounts.find(a => a.id === id)?.name ?? 'Unknown Account'
@@ -98,7 +101,7 @@ export default function Transactions() {
           /* Daily view content */<>
             {isLoading ? (
               <div className="p-4 text-slate-500 text-center mt-4">Loading transactions...</div>
-            ) : transactions.length === 0 ? (
+            ) : transactions.length === 0 && !isLoading ? (
               <div className="p-8 text-center text-slate-400 italic">No transactions recorded yet.</div>
             ) : (
               <div className="pb-8">
@@ -236,7 +239,9 @@ export default function Transactions() {
 
       <AddTransactionModal
         isOpen={!!editingTx}
-        onClose={() => setEditingTx(null)}
+        onClose={() => {
+          setEditingTx(null)
+        }}
         initialData={editingTx}
       />
 

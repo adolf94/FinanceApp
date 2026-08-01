@@ -5,9 +5,10 @@ import {
   useCreateAccount,
   useCreateAccountGroup,
   useDeleteAccount,
+  useGenerateAccountDescription,
   Account,
 } from '@/hooks/useAccounts'
-import { Building2, CreditCard, Landmark, Plus, Trash2 } from 'lucide-react'
+import { Building2, CreditCard, Landmark, Plus, Trash2, Sparkles } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import ConfirmationModal from '@/components/ui/ConfirmationModal'
 
@@ -18,12 +19,14 @@ export default function Accounts() {
   const createAccountMutation = useCreateAccount()
   const createGroupMutation = useCreateAccountGroup()
   const deleteAccountMutation = useDeleteAccount()
+  const generateDescriptionMutation = useGenerateAccountDescription()
 
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupType, setNewGroupType] = useState('Asset')
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [newAccount, setNewAccount] = useState<Account>({
     name: '',
+    description: '',
     accountGroupId: '',
     startingBalance: 0,
     accountType: 'Bank',
@@ -40,6 +43,25 @@ export default function Accounts() {
     })
   }
 
+  const handleGenerateDescription = async () => {
+    if (!newAccount.name.trim() || !newAccount.accountGroupId) return
+    const groupName = groups.find(g => g.id === newAccount.accountGroupId)?.name || ''
+    const context = newAccount.description || ""
+    
+    try {
+      const { description } = await generateDescriptionMutation.mutateAsync({
+        name: newAccount.name,
+        type: newAccount.accountType as string,
+        groupName: groupName,
+        context: context
+      })
+      setNewAccount({ ...newAccount, description })
+    } catch (e) {
+      console.error(e)
+      alert("Failed to generate description.")
+    }
+  }
+
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newAccount.name.trim() || !newAccount.accountGroupId) return
@@ -48,6 +70,7 @@ export default function Accounts() {
         setShowAddAccount(false)
         setNewAccount({
           name: '',
+          description: '',
           accountGroupId: '',
           startingBalance: 0,
           accountType: 'Bank',
@@ -142,6 +165,28 @@ export default function Accounts() {
                 className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
               />
 
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">Description (helps AI classification)</span>
+                  <button
+                    type="button"
+                    onClick={handleGenerateDescription}
+                    disabled={generateDescriptionMutation.isPending || !newAccount.name || !newAccount.accountGroupId}
+                    className="text-[10px] flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    {generateDescriptionMutation.isPending ? 'Generating...' : 'AI Generate'}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. For daily expenses"
+                  value={newAccount.description || ''}
+                  onChange={(e) => setNewAccount({ ...newAccount, description: e.target.value })}
+                  className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
               <select
                 value={newAccount.accountGroupId}
                 onChange={(e) => {
@@ -235,6 +280,11 @@ export default function Accounts() {
                             <p className="text-base font-semibold text-slate-900 dark:text-slate-50 leading-tight">
                               {acc.name}
                             </p>
+                            {acc.description && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                {acc.description}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 relative z-10">

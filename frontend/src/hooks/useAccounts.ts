@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '@/lib/apiClient'
+import ingesterClient from '@/lib/ingesterClient'
 
 export interface AccountGroup {
   id: string
@@ -10,6 +11,7 @@ export interface AccountGroup {
 export interface Account {
   id?: string
   name: string
+  description?: string
   accountGroupId: string
   startingBalance: number
   currentBalance?: number
@@ -86,6 +88,16 @@ export function useCreateAccountGroup() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accountGroups'] })
     },
+  })
+}
+
+export function useGenerateAccountDescription() {
+  return useMutation({
+    mutationFn: async (data: { name: string, type: string, groupName: string, context?: string }) => {
+      // Goes directly to Python ingester (JWT Bearer, no .NET proxy)
+      const response = await ingesterClient.post<{description: string}>('/accounts/generate-description', data)
+      return response.data
+    }
   })
 }
 

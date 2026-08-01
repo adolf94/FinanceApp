@@ -42,4 +42,4 @@ class CosmosVectorRepository(IVectorRepository):
 
     async def upsert_async(self, vector: TransactionVector) -> None:
         container = await self._get_container()
-        await container.upsert_item(vector.model_dump(by_alias=True))
+        await container.upsert_item(vector.model_dump(by_alias=True, mode="json"))

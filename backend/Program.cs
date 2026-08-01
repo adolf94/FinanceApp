@@ -19,6 +19,7 @@ builder.Services.AddSingleton(new ArAuthOptions
     Authority = "https://auth.adolfrey.com/api",
     ClientId = "finance-app2"
 });
+builder.Services.AddHttpClient();
 builder.Services.AddSingleton(new ArAuthMiddlewareOptions());
 builder.Services.AddSingleton<IArAuthClient>(sp =>
 {

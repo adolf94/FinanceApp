@@ -24,6 +24,7 @@ namespace FinanceApp.Models
         public string UserId { get; set; } = string.Empty;
         public string AccountGroupId { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
         public decimal StartingBalance { get; set; }
         public decimal CurrentBalance { get; set; }
         [JsonConverter(typeof(JsonStringEnumConverter))]

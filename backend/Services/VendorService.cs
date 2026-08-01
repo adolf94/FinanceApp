@@ -39,5 +39,14 @@ namespace FinanceApp.Services
         {
             await _repository.DeleteVendorAsync(userId, id);
         }
+
+        public async Task EnsureVendorAndLookupsAsync(string userId, string vendorName, IEnumerable<string> lookups)
+        {
+            if (string.IsNullOrWhiteSpace(vendorName))
+                return;
+
+            var vendor = await CreateVendorAsync(userId, vendorName);
+            await _repository.EnsureLookupsAsync(userId, vendor.Id, lookups);
+        }
     }
 }

@@ -5,14 +5,21 @@ from uuid_extensions import uuid7
 from typing import Optional, List, Dict, Any
 
 class AiParsedData(BaseModel):
+    is_financial: Optional[bool] = True
     vendor: Optional[str] = None
     amount: Optional[float] = None
     transaction_type: Optional[str] = None
     debit_account_id: Optional[str] = None
     credit_account_id: Optional[str] = None
-    category: Optional[str] = None
+    suggested_account_creation: Optional[List[dict]] = None
     notes: Optional[str] = None
     confidence: Optional[float] = None
+    recipient_account_number: Optional[str] = None
+    recipient_account_name: Optional[str] = None
+    sender_account_number: Optional[str] = None
+    sender_account_name: Optional[str] = None
+    application: Optional[str] = None
+    why: Optional[str] = None
 
 class PendingIngestion(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid7()))
@@ -29,6 +36,7 @@ class PendingIngestion(BaseModel):
     transaction_id: Optional[str] = None
     month_key: str
     partition_key: str
+    ttl: Optional[int] = Field(default=None, alias="_ttl")
 
     class Config:
         populate_by_name = True

@@ -52,7 +52,8 @@ def main():
     user_partitioned_containers = [
         "PhoneHookMessages",
         "PendingIngestions",
-        "TransactionVectors"
+        "TransactionVectors",
+        "Settings"
     ]
     
     for container_name in user_partitioned_containers:

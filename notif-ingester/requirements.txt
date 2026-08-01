@@ -5,7 +5,11 @@ pydantic
 python-dotenv
 pytz
 uuid7
+aiohttp
 
 numpy
 pytest
 pytest-asyncio
+debugpy
+
+ar-auth-client @ git+https://github.com/adolf94/ar-oauth2.git#subdirectory=ar-auth-client-python

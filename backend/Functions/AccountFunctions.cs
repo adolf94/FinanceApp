@@ -147,6 +147,39 @@ namespace FinanceApp.Functions
             await _accountService.DeleteAccountGroupAsync(userId, id);
             return new NoContentResult();
         }
+        [Function("GenerateAccountDescription")]
+        public async Task<IActionResult> GenerateAccountDescription(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "accounts/generate-description")] HttpRequest req, FunctionContext context)
+        {
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
+            
+            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            
+            // Proxy the request to python notif-ingester
+            var ingesterUrl = Environment.GetEnvironmentVariable("INGESTER_API_URL");
+            var ingesterKey = Environment.GetEnvironmentVariable("INGESTER_API_KEY");
+            
+            if (string.IsNullOrEmpty(ingesterUrl) || string.IsNullOrEmpty(ingesterKey))
+            {
+                return new StatusCodeResult(500);
+            }
+            
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("x-api-key", ingesterKey);
+            httpClient.DefaultRequestHeaders.Add("x-user-id", userId);
+            
+            var content = new StringContent(requestBody, System.Text.Encoding.UTF8, "application/json");
+            var response = await httpClient.PostAsync($"{ingesterUrl}/api/accounts/generate-description", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return new ContentResult { Content = responseContent, ContentType = "application/json", StatusCode = 200 };
+            }
+            
+            return new StatusCodeResult((int)response.StatusCode);
+        }
     }
 }
 

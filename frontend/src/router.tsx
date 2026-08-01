@@ -6,6 +6,7 @@ import Accounts from '@/pages/Accounts'
 import AccountDetails from '@/pages/AccountDetails'
 import Settings from '@/pages/Settings'
 import CategoryDetails from '@/pages/CategoryDetails'
+import PendingIngestions from '@/pages/PendingIngestions'
 
 // Root layout route
 const rootRoute = createRootRoute({
@@ -29,6 +30,12 @@ const accountsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/accounts',
   component: Accounts,
+})
+
+const ingestionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ingestions',
+  component: PendingIngestions,
 })
 
 const accountDetailsRoute = createRoute({
@@ -60,6 +67,7 @@ const routeTree = rootRoute.addChildren([
   accountDetailsRoute,
   categoryDetailsRoute,
   settingsRoute,
+  ingestionsRoute,
 ])
 
 export const router = createRouter({ routeTree })

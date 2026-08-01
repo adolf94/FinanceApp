@@ -42,6 +42,7 @@ namespace FinanceApp.Services
             // it's adjusted dynamically via transactions.
             // But we can update metadata:
             existingAccount.Name = account.Name;
+            existingAccount.Description = account.Description;
             existingAccount.AccountGroupId = account.AccountGroupId;
             existingAccount.AccountType = account.AccountType;
             existingAccount.CreditCardCycleStartDay = account.CreditCardCycleStartDay;

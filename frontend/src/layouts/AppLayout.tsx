@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from '@tanstack/react-router'
-import { LayoutDashboard, ArrowLeftRight, Wallet, Settings, Plus, LogOut } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Wallet, Settings, Plus, LogOut, Inbox } from 'lucide-react'
 import AddTransactionModal from '@/components/AddTransactionModal'
 import { useAuth } from '@adolf94/ar-auth-client'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { path: '/ingestions', label: 'Inbox', icon: Inbox },
   { path: '/accounts', label: 'Accounts', icon: Wallet },
   { path: '/settings', label: 'Settings', icon: Settings },
 ]

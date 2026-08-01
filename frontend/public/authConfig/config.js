@@ -3,5 +3,6 @@ window.authConfig = {
   clientId: "finance-app2",
   redirectUri: "http://localhost:5173",
   scope: "openid profile email",
-  apiBaseUrl: "http://localhost:7071/api"
+  apiBaseUrl: "http://localhost:7071/api",
+  ingesterBaseUrl: "http://localhost:7072"
 };
