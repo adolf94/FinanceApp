@@ -4,9 +4,6 @@
 name: Build and deploy dotnet core project to Azure Function App - financeapp2
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
@@ -56,3 +53,18 @@ jobs:
           slot-name: 'Production'
           package: '${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/output'
           
+      - name: Setup Python for Migrations
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Migration Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install azure-cosmos
+
+      - name: Run Migrations
+        env:
+          CosmosConnectionString: ${{ secrets.COSMOS_CONNECTION_STRING }}
+          COSMOS_DB: ${{ secrets.COSMOS_DB || 'FinanceDb' }}
+        run: python scripts/migrate.py
