@@ -14,6 +14,10 @@ class IIngestionRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_by_status_async(self, user_id: str, status: str) -> list[PendingIngestion]:
+        pass
+
+    @abstractmethod
     async def update_async(self, ingestion: PendingIngestion) -> None:
         pass
 
@@ -40,6 +44,26 @@ class CosmosIngestionRepository(IIngestionRepository):
             return PendingIngestion(**item)
         except Exception:
             return None
+
+    async def get_by_status_async(self, user_id: str, status: str) -> list[PendingIngestion]:
+        container = await self._get_container()
+        query = (
+            "SELECT * FROM c "
+            "WHERE c.UserId = @user_id AND c.status = @status "
+            "ORDER BY c.received_at DESC"
+        )
+        parameters = [
+            {"name": "@user_id", "value": user_id},
+            {"name": "@status", "value": status}
+        ]
+        items = container.query_items(
+            query=query,
+            parameters=parameters
+        )
+        results = []
+        async for item in items:
+            results.append(PendingIngestion(**item))
+        return results
 
     async def update_async(self, ingestion: PendingIngestion) -> None:
         container = await self._get_container()

@@ -1,6 +1,6 @@
 from models.enums import AccountType, TransactionType
 from models.phone_hook import PhoneHookMessage
-from models.pending_ingestion import PendingIngestion, AiParsedData
+from models.pending_ingestion import PendingIngestion, AiParsedData, SuggestedAccountCreation
 from models.transaction_vector import TransactionVector
 from models.account_group import AccountGroup
 from models.account import Account
@@ -15,6 +15,7 @@ __all__ = [
     "PhoneHookMessage",
     "PendingIngestion",
     "AiParsedData",
+    "SuggestedAccountCreation",
     "TransactionVector",
     "AccountGroup",
     "Account",

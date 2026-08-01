@@ -13,6 +13,7 @@ namespace FinanceApp.Functions
     public class TransactionFunctions
     {
         private readonly ITransactionService _transactionService;
+        private readonly IVendorService _vendorService;
         private readonly ILogger<TransactionFunctions> _logger;
 
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
@@ -21,9 +22,10 @@ namespace FinanceApp.Functions
             Converters = { new JsonStringEnumConverter() }
         };
 
-        public TransactionFunctions(ITransactionService transactionService, ILogger<TransactionFunctions> logger)
+        public TransactionFunctions(ITransactionService transactionService, IVendorService vendorService, ILogger<TransactionFunctions> logger)
         {
             _transactionService = transactionService;
+            _vendorService = vendorService;
             _logger = logger;
         }
 
@@ -163,6 +165,72 @@ namespace FinanceApp.Functions
                 return new NotFoundObjectResult(ex.Message);
             }
         }
+        [Function("CreateTransactionFromIngestion")]
+        public async Task<IActionResult> CreateTransactionFromIngestion(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "transactions/from-ingestion")] HttpRequest req, FunctionContext context)
+        {
+            string? userId = context.GetUserId();
+            if (string.IsNullOrEmpty(userId)) return new UnauthorizedResult();
+            
+            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var aiData = JsonSerializer.Deserialize<AiParsedData>(requestBody, _jsonOptions);
+
+            if (aiData == null || !aiData.Amount.HasValue || string.IsNullOrEmpty(aiData.DebitAccountId) || string.IsNullOrEmpty(aiData.CreditAccountId))
+            {
+                return new BadRequestObjectResult("Invalid ingestion data. Amount, DebitAccountId, and CreditAccountId are required.");
+            }
+
+            var transaction = new Transaction
+            {
+                Id = Guid.CreateVersion7().ToString(),
+                UserId = userId,
+                Date = DateTime.UtcNow,
+                Vendor = aiData.Vendor,
+                Type = Enum.TryParse<TransactionType>(aiData.TransactionType, true, out var typeEnum) ? typeEnum : TransactionType.Expense,
+                Note = aiData.Notes,
+                Entries = new List<LedgerEntry>
+                {
+                    new LedgerEntry
+                    {
+                        Id = Guid.CreateVersion7().ToString(),
+                        UserId = userId,
+                        AccountId = aiData.DebitAccountId,
+                        Amount = aiData.Amount.Value // Positive for debit
+                    },
+                    new LedgerEntry
+                    {
+                        Id = Guid.CreateVersion7().ToString(),
+                        UserId = userId,
+                        AccountId = aiData.CreditAccountId,
+                        Amount = -aiData.Amount.Value // Negative for credit
+                    }
+                }
+            };
+
+            try
+            {
+                var createdTx = await _transactionService.CreateTransactionAsync(userId, transaction);
+
+                var lookups = new List<string>();
+                if (!string.IsNullOrWhiteSpace(aiData.RecipientAccountName)) lookups.Add(aiData.RecipientAccountName);
+                if (!string.IsNullOrWhiteSpace(aiData.RecipientAccountNumber)) lookups.Add(aiData.RecipientAccountNumber);
+                if (!string.IsNullOrWhiteSpace(aiData.SenderAccountName)) lookups.Add(aiData.SenderAccountName);
+                if (!string.IsNullOrWhiteSpace(aiData.SenderAccountNumber)) lookups.Add(aiData.SenderAccountNumber);
+                if (!string.IsNullOrWhiteSpace(aiData.Vendor)) lookups.Add(aiData.Vendor);
+                if (!string.IsNullOrWhiteSpace(aiData.Application)) lookups.Add(aiData.Application);
+
+                if (!string.IsNullOrWhiteSpace(aiData.Vendor))
+                {
+                    await _vendorService.EnsureVendorAndLookupsAsync(userId, aiData.Vendor, lookups);
+                }
+
+                return new OkObjectResult(createdTx);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating transaction from ingestion");
+                return new BadRequestObjectResult(ex.Message);
+            }
+        }
     }
 }
-

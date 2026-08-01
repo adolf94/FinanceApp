@@ -78,8 +78,8 @@ def main():
         "RecurringLedgerEntry": models.RecurringLedgerEntry,
         "RecurringTransactionOccurrence": models.RecurringTransactionOccurrence,
         "PhoneHookMessage": getattr(models, "PhoneHookMessage", None),
-        "PendingIngestion": getattr(models, "PendingIngestion", None),
         "AiParsedData": getattr(models, "AiParsedData", None),
+        "SuggestedAccountCreation": getattr(models, "SuggestedAccountCreation", None),
         "TransactionVector": getattr(models, "TransactionVector", None),
     }
     
@@ -94,7 +94,7 @@ def main():
         "LedgerEntry.cs",
         "RecurringTransaction.cs",
         "PhoneHookMessage.cs",
-        "PendingIngestion.cs",
+        "AiParsedData.cs",
         "TransactionVector.cs",
     ]
     

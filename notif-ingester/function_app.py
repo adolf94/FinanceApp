@@ -158,6 +158,90 @@ async def LearnIngestionFunction(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"Error learning ingestion: {e}")
         return func.HttpResponse(f"Internal server error: {e}", status_code=500)
 
+# ── Function 3.1: GetPendingIngestionsFunction ──────────────────────────
+@app.route(route="ingestions", methods=["GET"])
+async def GetPendingIngestionsFunction(req: func.HttpRequest) -> func.HttpResponse:
+    user, err = _require_auth(req)
+    if err: return err
+
+    status = req.params.get("status", "Pending")
+    user_id = user.get("sub", "default")
+    
+    ingestion_service = get_ingestion_service()
+    try:
+        # Access the repository directly from the service
+        ingestions = await ingestion_service.ingestion_repo.get_by_status_async(user_id, status)
+        return func.HttpResponse(
+            json.dumps([i.model_dump(by_alias=True, mode="json") for i in ingestions]),
+            status_code=200, mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error fetching ingestions: {e}")
+        return func.HttpResponse(f"Internal server error: {e}", status_code=500)
+
+# ── Function 3.2: RejectIngestionFunction ──────────────────────────────
+@app.route(route="ingestions/{ingestion_id}/reject", methods=["POST"])
+async def RejectIngestionFunction(req: func.HttpRequest) -> func.HttpResponse:
+    user, err = _require_auth(req)
+    if err: return err
+
+    ingestion_id = req.route_params.get("ingestion_id")
+    user_id = user.get("sub", "default")
+    
+    ingestion_service = get_ingestion_service()
+    try:
+        ingestion = await ingestion_service.ingestion_repo.get_by_id_async(ingestion_id, user_id)
+        if not ingestion:
+            return func.HttpResponse("Ingestion not found", status_code=404)
+            
+        ingestion.status = "Rejected"
+        await ingestion_service.ingestion_repo.update_async(ingestion)
+        
+        return func.HttpResponse(
+            json.dumps({"id": ingestion_id, "status": "Rejected"}),
+            status_code=200, mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error rejecting ingestion: {e}")
+        return func.HttpResponse(f"Internal server error: {e}", status_code=500)
+
+# ── Function 3.3: ConfirmStatusFunction ────────────────────────────────
+@app.route(route="ingestions/{ingestion_id}/confirm-status", methods=["POST"])
+async def ConfirmStatusFunction(req: func.HttpRequest) -> func.HttpResponse:
+    user, err = _require_auth(req)
+    if err: return err
+
+    ingestion_id = req.route_params.get("ingestion_id")
+    user_id = user.get("sub", "default")
+    
+    try:
+        body = req.get_json()
+        transaction_id = body.get("transaction_id")
+        user_confirmed = body.get("user_confirmed", {})
+    except ValueError:
+        return func.HttpResponse("Invalid JSON", status_code=400)
+        
+    ingestion_service = get_ingestion_service()
+    try:
+        ingestion = await ingestion_service.ingestion_repo.get_by_id_async(ingestion_id, user_id)
+        if not ingestion:
+            return func.HttpResponse("Ingestion not found", status_code=404)
+            
+        ingestion.status = "Confirmed"
+        ingestion.transaction_id = transaction_id
+        await ingestion_service.ingestion_repo.update_async(ingestion)
+        
+        # Trigger learning asynchronously (we await it here, but it happens after C# created the tx)
+        learned = await ingestion_service.learn_ingestion_async(ingestion_id, user_id, user_confirmed)
+        
+        return func.HttpResponse(
+            json.dumps(learned.model_dump(by_alias=True, mode="json")),
+            status_code=200, mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error confirming ingestion status: {e}")
+        return func.HttpResponse(f"Internal server error: {e}", status_code=500)
+
 # ── Function 4: ReclassifyIngestionFunction ───────────────────────────────
 @app.route(route="ingestions/{ingestion_id}/reclassify", methods=["POST"])
 async def ReclassifyIngestionFunction(req: func.HttpRequest) -> func.HttpResponse:

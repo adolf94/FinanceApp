@@ -25,6 +25,10 @@ class IngestionService:
         self._finance_api_service = finance_api_service
         self._auto_confirm_threshold = float(os.environ.get("AUTO_CONFIRM_THRESHOLD", "0.92"))
 
+    @property
+    def ingestion_repo(self) -> IIngestionRepository:
+        return self._repo
+
     async def process_hook_async(self, hook: PhoneHookMessage) -> PendingIngestion:
         logging.info("[process_hook_async] Starting...")
         # 1. Embed raw_msg

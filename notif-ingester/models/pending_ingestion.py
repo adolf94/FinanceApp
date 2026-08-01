@@ -20,6 +20,14 @@ class AiParsedData(BaseModel):
     sender_account_name: Optional[str] = None
     application: Optional[str] = None
     why: Optional[str] = None
+    user_why: Optional[str] = None
+
+class SuggestedAccountCreation(BaseModel):
+    type: Optional[str] = None
+    account_group: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    reason: Optional[str] = None
 
 class PendingIngestion(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid7()))

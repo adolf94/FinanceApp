@@ -11,6 +11,7 @@ class Account(BaseModel):
     starting_balance: float = Field(alias="StartingBalance")
     current_balance: float = Field(alias="CurrentBalance")
     account_type: AccountType = Field(alias="AccountType")
+    description: Optional[str] = Field(default=None, alias="Description")
     credit_card_cycle_start_day: Optional[int] = Field(default=None, alias="CreditCardCycleStartDay")
     credit_card_payment_due_day: Optional[int] = Field(default=None, alias="CreditCardPaymentDueDay")
 
