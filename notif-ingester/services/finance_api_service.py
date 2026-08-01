@@ -306,7 +306,9 @@ class FinanceApiService:
         if parsed.vendor:
             await self.ensure_vendor_and_lookups_async(ingestion.user_id, parsed.vendor, lookups)
             
-        return tx_doc    async def get_runbook_content_async(self, user_id: str) -> str:
+        return tx_doc
+
+    async def get_runbook_content_async(self, user_id: str) -> str:
         if not self.client:
             return ""
         try:
