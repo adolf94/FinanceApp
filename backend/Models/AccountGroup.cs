@@ -1,3 +1,4 @@
+// Source: C# (Original)
 using System.Text.Json.Serialization;
 
 namespace FinanceApp.Models

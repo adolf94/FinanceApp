@@ -5,7 +5,7 @@ pydantic
 python-dotenv
 pytz
 uuid7
-httpx
+
 numpy
 pytest
 pytest-asyncio

@@ -35,7 +35,7 @@ class IngestionService:
         top_score = similar_vectors[0][1] if similar_vectors else 0.0
 
         # 3. Fetch accounts
-        accounts = await self._finance_api_service.get_accounts_async()
+        accounts = await self._finance_api_service.get_accounts_async(hook.user_id)
 
         # 4. Classify via LLM
         ai_parsed = await self._ai_service.classify_async(hook, similar_vectors, accounts)

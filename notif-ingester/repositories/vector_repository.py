@@ -26,7 +26,7 @@ class CosmosVectorRepository(IVectorRepository):
 
     async def get_all_by_user_async(self, user_id: str) -> List[TransactionVector]:
         container = await self._get_container()
-        query = "SELECT * FROM c WHERE c.user_id = @user_id"
+        query = "SELECT * FROM c WHERE c.UserId = @user_id"
         parameters = [{"name": "@user_id", "value": user_id}]
         
         items = container.query_items(

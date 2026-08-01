@@ -69,7 +69,7 @@ async def PhoneHookFunction(req: func.HttpRequest) -> func.HttpResponse:
 @app.cosmos_db_trigger(
     arg_name="documents",
     connection="CosmosConnectionString",
-    database_name=os.environ.get("COSMOS_DB", "FinanceDb"),
+    database_name="%COSMOS_DB%",
     container_name="PhoneHookMessages",
     lease_container_name="PhoneHookMessages-leases",
     create_lease_container_if_not_exists=True,

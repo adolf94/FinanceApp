@@ -1,3 +1,4 @@
+// Source: C# (Original)
 namespace FinanceApp.Models
 {
     public class Vendor

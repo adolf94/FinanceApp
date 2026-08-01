@@ -1,3 +1,4 @@
+# Source: Python (Original)
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from uuid_extensions import uuid7
@@ -15,7 +16,7 @@ class AiParsedData(BaseModel):
 
 class PendingIngestion(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid7()))
-    user_id: str = "default"
+    user_id: str = Field(default="default", alias="UserId")
     hook_id: str
     received_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     raw_payload: dict
@@ -28,3 +29,6 @@ class PendingIngestion(BaseModel):
     transaction_id: Optional[str] = None
     month_key: str
     partition_key: str
+
+    class Config:
+        populate_by_name = True

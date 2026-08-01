@@ -25,3 +25,11 @@ The AI reads this document during classification. Explicit rules here **override
 
 - *No unconsidered feedback currently.*
 
+## 4. Vector Embeddings & Manual Overrides
+*(Reference for how this Runbook interacts with the AI and Vector Service)*
+
+- **Vector Context:** The `ai_service` automatically fetches the top 3 similar past transactions (via `vector_service`) and injects them as context for the AI.
+- **Runbook Precedence:** The explicit rules and vendor mappings in this Runbook **always take precedence** over the historical vector context. 
+- **When to update this Runbook vs Manual Embedding:** 
+  - If a vendor constantly changes its naming format but means the same thing, add a keyword rule to **Section 2** here.
+  - If the AI is categorizing an obscure vendor wrong because there is no past vector data, you can either manually correct the transaction (which creates a new vector embedding for future matching) OR add an explicit rule here if you want it hardcoded immediately.
