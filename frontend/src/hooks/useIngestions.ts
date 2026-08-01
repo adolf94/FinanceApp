@@ -114,6 +114,19 @@ export function useReclassifyIngestion() {
   })
 }
 
+export function useUpdateIngestionVendor() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, vendor }: { id: string; vendor: string }) => {
+      const response = await ingesterClient.patch(`/ingestions/${id}/vendor`, { vendor })
+      return response.data as PendingIngestion
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pendingIngestions'] })
+    }
+  })
+}
+
 export interface HistoricalHook {
   id: string
   Date: string

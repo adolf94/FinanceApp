@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGetPendingIngestions, useConfirmIngestion, useRejectIngestion, PendingIngestion } from '@/hooks/useIngestions'
+import { useGetPendingIngestions, useConfirmIngestion, useRejectIngestion, useUpdateIngestionVendor, PendingIngestion } from '@/hooks/useIngestions'
 import { Check, X, Edit, BellDot, Sparkles, PlusCircle } from 'lucide-react'
 import { useGetAccounts, useCreateAccount, useGetAccountGroups, useCreateAccountGroup } from '@/hooks/useAccounts'
 import dayjs from 'dayjs'
@@ -15,11 +15,13 @@ export default function PendingIngestionsList({ onEditConfirm }: PendingIngestio
   
   const confirmMutation = useConfirmIngestion()
   const rejectMutation = useRejectIngestion()
+  const updateVendorMutation = useUpdateIngestionVendor()
   const createAccountMutation = useCreateAccount()
   const createGroupMutation = useCreateAccountGroup()
 
   const [processingIds, setProcessingIds] = useState<string[]>([])
   const [editingSuggestion, setEditingSuggestion] = useState<{ ingestionId: string, idx: number, data: { name: string, account_group: string, type: string, description: string } } | null>(null)
+  const [editingVendor, setEditingVendor] = useState<{ ingestionId: string, vendor: string } | null>(null)
 
   const getAccountName = (id?: string | null) => {
     if (!id) return 'Unassigned'
@@ -76,6 +78,17 @@ export default function PendingIngestionsList({ onEditConfirm }: PendingIngestio
       setEditingSuggestion(null)
     } catch (err) {
       console.error('Failed to create suggested account', err)
+    } finally {
+      setProcessingIds(prev => prev.filter(x => x !== ingestionId))
+    }
+  }
+
+  const handleUpdateVendor = async (ingestionId: string) => {
+    if (!editingVendor) return
+    setProcessingIds(prev => [...prev, ingestionId])
+    try {
+      await updateVendorMutation.mutateAsync({ id: ingestionId, vendor: editingVendor.vendor })
+      setEditingVendor(null)
     } finally {
       setProcessingIds(prev => prev.filter(x => x !== ingestionId))
     }
@@ -145,9 +158,43 @@ export default function PendingIngestionsList({ onEditConfirm }: PendingIngestio
                   <span className={`uppercase font-semibold text-[10px] ${ingestion.ai_parsed.vendor_matched ? 'text-slate-400' : 'text-amber-500'}`}>
                     {ingestion.ai_parsed.vendor_matched ? 'Vendor' : 'Suggested Vendor'}
                   </span>
-                  <span className="text-slate-700 dark:text-slate-350 font-medium truncate">
-                    {ingestion.ai_parsed.vendor || 'Unknown Vendor'}
-                  </span>
+                  {editingVendor?.ingestionId === ingestion.id ? (
+                    <div className="flex items-center gap-1 mt-1">
+                      <input 
+                        autoFocus
+                        value={editingVendor.vendor}
+                        onChange={e => setEditingVendor({ ...editingVendor, vendor: e.target.value })}
+                        className="w-full text-xs px-2 py-1 rounded border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                        placeholder="Vendor Name"
+                      />
+                      <button
+                        onClick={() => handleUpdateVendor(ingestion.id)}
+                        disabled={!editingVendor.vendor.trim() || processingIds.includes(ingestion.id)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-1 rounded disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingVendor(null)}
+                        className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 p-1 rounded"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group">
+                      <span className="text-slate-700 dark:text-slate-350 font-medium truncate">
+                        {ingestion.ai_parsed.vendor || 'Unknown Vendor'}
+                      </span>
+                      <button
+                        onClick={() => setEditingVendor({ ingestionId: ingestion.id, vendor: ingestion.ai_parsed.vendor || '' })}
+                        className="text-slate-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Edit Vendor"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {ingestion.ai_parsed.suggested_account_creation && ingestion.ai_parsed.suggested_account_creation.length > 0 && (
                   <div className="flex flex-col gap-2 col-span-2">

@@ -74,12 +74,12 @@ def validate_api_key(req: func.HttpRequest) -> bool:
 @app.route(route="phone_hook", methods=["POST"])
 async def PhoneHookFunction(req: func.HttpRequest) -> func.HttpResponse:
     if not validate_api_key(req):
-        return func.HttpResponse("Unauthorized", status_code=401)
+        return func.HttpResponse(json.dumps({"message": "Unauthorized"}), status_code=401, mimetype="application/json")
         
     try:
         body = req.get_json()
     except ValueError:
-        return func.HttpResponse("Invalid JSON", status_code=400)
+        return func.HttpResponse(json.dumps({"message": "Invalid JSON"}), status_code=400, mimetype="application/json")
         
     hook_service = get_hook_service()
     
@@ -92,7 +92,7 @@ async def PhoneHookFunction(req: func.HttpRequest) -> func.HttpResponse:
         )
     except Exception as e:
         logging.error(f"Error saving hook: {e}")
-        return func.HttpResponse(f"Internal server error: {e}", status_code=500)
+        return func.HttpResponse(json.dumps({"message": f"Internal server error: {e}"}), status_code=500, mimetype="application/json")
 
 # ── Function 2: ClassifyNotificationFunction ────────────────────────────────
 @app.cosmos_db_trigger(
@@ -264,6 +264,43 @@ async def ReclassifyIngestionFunction(req: func.HttpRequest) -> func.HttpRespons
         return func.HttpResponse(str(e), status_code=404)
     except Exception as e:
         logging.error(f"Error reclassifying ingestion: {e}")
+        return func.HttpResponse(f"Internal server error: {e}", status_code=500)
+
+# ── Function 4.5: PatchIngestionVendorFunction ──────────────────────────────
+@app.route(route="ingestions/{ingestion_id}/vendor", methods=["PATCH"])
+async def PatchIngestionVendorFunction(req: func.HttpRequest) -> func.HttpResponse:
+    user, err = _require_auth(req)
+    if err: return err
+
+    ingestion_id = req.route_params.get("ingestion_id")
+    user_id = user.get("sub", "default")
+    
+    try:
+        body = req.get_json()
+        new_vendor = body.get("vendor", "")
+    except ValueError:
+        return func.HttpResponse("Invalid JSON", status_code=400)
+        
+    if not new_vendor:
+        return func.HttpResponse("Missing 'vendor' field", status_code=400)
+        
+    ingestion_service = get_ingestion_service()
+    try:
+        ingestion = await ingestion_service.ingestion_repo.get_by_id_async(ingestion_id, user_id)
+        if not ingestion:
+            return func.HttpResponse("Ingestion not found", status_code=404)
+            
+        ingestion.ai_parsed.vendor = new_vendor
+        ingestion.ai_parsed.vendor_matched = True
+        
+        await ingestion_service.ingestion_repo.update_async(ingestion)
+        
+        return func.HttpResponse(
+            json.dumps(ingestion.model_dump(by_alias=True, mode="json")),
+            status_code=200, mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error updating vendor: {e}")
         return func.HttpResponse(f"Internal server error: {e}", status_code=500)
 
 # ── Function 5: ClassifyHookFunction (Synchronous classification endpoint) ─

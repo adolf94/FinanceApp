@@ -54,7 +54,7 @@ Return ONLY valid JSON matching this schema:
   "transaction_type": "Expense"|"Income"|"Transfer"|"Journal" (null if not financial),
   "debit_account_id": string (account id from the list above, null if not financial),
   "credit_account_id": string (account id from the list above, null if not financial),
-  "suggested_account_creation": [{{"type": "Cash"|"Bank"|"CreditCard"|"Investment"|"Asset"|"Liability"|"Equity"|"Income"|"Expense"|"Adjustment", "account_group": "string", "name": "string", "description": "string", "reason": "string"}}] (empty array if no accounts need to be created, or if not financial),
+  "suggested_account_creation": [{{"type": "Cash"|"Bank"|"CreditCard"|"Investment"|"Asset"|"Liability"|"Equity"|"Income"|"Expense"|"Adjustment", "account_group": "string", "name": "string", "description": "string", "reason": "string (Explain the financial purpose of this account AND why you chose this specific name and group. NEVER mention that it is because an account is missing or not found. Focus purely on what financial activity this account tracks and why it is named this way, e.g., 'To track dining expenses under the Food group'.)"}}] (empty array if no accounts need to be created, or if not financial),
   "notes": string,
   "confidence": number (0.0-1.0),
   "recipient_account_number": string (recipient/card/account number if mentioned in the message, null if not financial),
@@ -73,6 +73,7 @@ Rules:
 - Entries must balance (debit amount positive, credit amount negative)
 - CRITICAL: "Vendor" can mean a business OR an individual person (e.g. for GCash/bank transfers, the recipient's or sender's name is the Vendor). If the person or business matches an "Existing Vendor", prefer the existing name exactly.
 - CRITICAL: DO NOT hallucinate account IDs. Use exact account IDs from the accounts list. If no appropriate account exists for the transaction (i.e. Asset not found or Expense/Income not available), set the debit/credit account ID to null and provide a `suggested_account_creation`.
+- CRITICAL for `suggested_account_creation` reason: Focus ONLY on the functional, financial purpose of the account AND explain why you chose this specific name and group for it (e.g., "To categorize online shopping expenses, placing it under General Merchandise"). NEVER say "because it doesn't exist", "no appropriate account was found", or "because no specific account is available". Assume the user just wants to know what this account is FOR and WHY it is named this way.
 - In the 'why' explanation field, do NOT include any raw UUIDs/IDs (e.g., account IDs like '018f3a3d-...'). Refer to accounts by their human-readable names instead.
 """
 

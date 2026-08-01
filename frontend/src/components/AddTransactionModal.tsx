@@ -980,6 +980,36 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                     )}
                   </div>
 
+                  {ingestion.ai_parsed.vendor && !ingestion.ai_parsed.vendor_matched && !dbVendors.some(v => v.name.toLowerCase() === ingestion.ai_parsed.vendor?.toLowerCase()) && (
+                    <div className="flex flex-col gap-1.5 p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 rounded-xl mt-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col gap-0.5 flex-1 pr-2">
+                          <span className="text-blue-500 uppercase font-semibold text-[9px] flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" /> Suggested Vendor Creation
+                          </span>
+                          <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">
+                            {ingestion.ai_parsed.vendor}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              createVendorMutation.mutate(ingestion.ai_parsed.vendor!, {
+                                onSuccess: () => {
+                                  setVendor(ingestion.ai_parsed.vendor!)
+                                }
+                              })
+                            }}
+                            disabled={createVendorMutation.isPending}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
+                          >
+                            <Plus className="w-3 h-3" /> Create
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {ingestion.ai_parsed.suggested_account_creation && ingestion.ai_parsed.suggested_account_creation.length > 0 && (
                     <div className="flex flex-col gap-2 mt-2">
                       {ingestion.ai_parsed.suggested_account_creation.map((suggestion, idx) => {
