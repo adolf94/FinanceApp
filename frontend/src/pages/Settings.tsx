@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Plus, Trash2, Tag, Store, Bell, X, Edit, History } from 'lucide-react'
+import { Plus, Trash2, Tag, Store, Bell, X, Edit, History, Sparkles } from 'lucide-react'
 import dayjs from 'dayjs'
 import ConfirmationModal from '@/components/ui/ConfirmationModal'
 import AddTransactionModal from '@/components/AddTransactionModal'
@@ -13,6 +13,7 @@ import {
   useGetAccounts,
   useCreateAccount,
   useDeleteAccount,
+  useGenerateAccountDescription,
 } from '@/hooks/useAccounts'
 import {
   useGetVendors,
@@ -99,10 +100,12 @@ function CategoriesSettings() {
   const deleteGroup = useDeleteAccountGroup()
   const createAccount = useCreateAccount()
   const deleteAccount = useDeleteAccount()
+  const generateDescriptionMutation = useGenerateAccountDescription()
 
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupType, setNewGroupType] = useState<'Expense' | 'Income'>('Expense')
   const [newAccountNames, setNewAccountNames] = useState<Record<string, string>>({})
+  const [newAccountDescriptions, setNewAccountDescriptions] = useState<Record<string, string>>({})
   const [deleteGroupCandidate, setDeleteGroupCandidate] = useState<{ id: string, name: string } | null>(null)
   const [deleteAccountCandidate, setDeleteAccountCandidate] = useState<{ id: string, name: string } | null>(null)
 
@@ -117,14 +120,39 @@ function CategoriesSettings() {
     )
   }
 
-  const handleCreateSubCategory = (e: React.FormEvent, groupId: string, type: string) => {
+  const handleCreateSubCategory = (e: React.FormEvent, groupId: string, type: string) =>
+  {
     e.preventDefault()
     const name = newAccountNames[groupId]?.trim()
+    const description = newAccountDescriptions[groupId]?.trim() || ''
     if (!name) return
     createAccount.mutate(
-      { name, accountGroupId: groupId, accountType: type as any, startingBalance: 0 },
-      { onSuccess: () => setNewAccountNames((prev) => ({ ...prev, [groupId]: '' })) }
+      { name, description, accountGroupId: groupId, accountType: type as any, startingBalance: 0 },
+      { onSuccess: () => {
+          setNewAccountNames((prev) => ({ ...prev, [groupId]: '' }))
+          setNewAccountDescriptions((prev) => ({ ...prev, [groupId]: '' }))
+        }
+      }
     )
+  }
+
+  const handleGenerateDescription = async (groupId: string, groupName: string, type: string) => {
+    const name = newAccountNames[groupId]?.trim()
+    if (!name) return
+    const context = newAccountDescriptions[groupId] || ""
+    
+    try {
+      const { description } = await generateDescriptionMutation.mutateAsync({
+        name,
+        type,
+        groupName,
+        context
+      })
+      setNewAccountDescriptions(prev => ({ ...prev, [groupId]: description }))
+    } catch (e) {
+      console.error(e)
+      alert("Failed to generate description.")
+    }
   }
 
   return (
@@ -193,17 +221,42 @@ function CategoriesSettings() {
                   </div>
                 ))}
 
-                <form onSubmit={(e) => handleCreateSubCategory(e, group.id, group.accountType!)} className="flex items-center mt-2 px-2">
-                  <input
-                    type="text"
-                    placeholder="Add sub-category..."
-                    value={newAccountNames[group.id] || ''}
-                    onChange={(e) => setNewAccountNames((prev) => ({ ...prev, [group.id]: e.target.value }))}
-                    className="flex-1 text-sm bg-transparent border-none outline-none text-slate-700 dark:text-slate-300 placeholder:text-slate-400 min-h-[32px]"
-                  />
-                  <button type="submit" className="text-blue-600 hover:text-blue-700 p-1" disabled={!newAccountNames[group.id]?.trim()}>
-                    <Plus className="w-4 h-4" />
-                  </button>
+                <form onSubmit={(e) => handleCreateSubCategory(e, group.id, group.accountType!)} className="flex flex-col gap-2 mt-2 p-2 bg-slate-50 dark:bg-slate-800/30 rounded-lg">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      placeholder="Add sub-category..."
+                      value={newAccountNames[group.id] || ''}
+                      onChange={(e) => setNewAccountNames((prev) => ({ ...prev, [group.id]: e.target.value }))}
+                      className="flex-1 text-sm bg-transparent border-none outline-none text-slate-700 dark:text-slate-300 placeholder:text-slate-400 min-h-[32px]"
+                    />
+                    <button type="submit" className="text-blue-600 hover:text-blue-700 p-1" disabled={!newAccountNames[group.id]?.trim()}>
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {newAccountNames[group.id]?.trim() && (
+                    <div className="flex flex-col gap-1 border-t border-slate-200 dark:border-slate-700 pt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400">Description (helps AI classification)</span>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateDescription(group.id, group.name, group.accountType!)}
+                          disabled={generateDescriptionMutation.isPending}
+                          className="text-[10px] flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          {generateDescriptionMutation.isPending ? 'Generating...' : 'AI Generate'}
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. For daily expenses"
+                        value={newAccountDescriptions[group.id] || ''}
+                        onChange={(e) => setNewAccountDescriptions((prev) => ({ ...prev, [group.id]: e.target.value }))}
+                        className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 text-slate-700 dark:text-slate-300 placeholder:text-slate-400"
+                      />
+                    </div>
+                  )}
                 </form>
               </div>
             </div>

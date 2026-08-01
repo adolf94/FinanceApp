@@ -25,5 +25,6 @@ namespace FinanceApp.Models
         public TransactionType Type { get; set; }
         
         public List<LedgerEntry> Entries { get; set; } = new();
+        public bool IsAutoConfirmed { get; set; } = false;
     }
 }

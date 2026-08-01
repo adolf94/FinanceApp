@@ -142,7 +142,9 @@ export default function PendingIngestionsList({ onEditConfirm }: PendingIngestio
               {/* Proposed transaction details */}
               <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-950/50 rounded-xl text-xs border border-slate-100 dark:border-slate-800/60">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-400 uppercase font-semibold text-[10px]">Vendor</span>
+                  <span className={`uppercase font-semibold text-[10px] ${ingestion.ai_parsed.vendor_matched ? 'text-slate-400' : 'text-amber-500'}`}>
+                    {ingestion.ai_parsed.vendor_matched ? 'Vendor' : 'Suggested Vendor'}
+                  </span>
                   <span className="text-slate-700 dark:text-slate-350 font-medium truncate">
                     {ingestion.ai_parsed.vendor || 'Unknown Vendor'}
                   </span>

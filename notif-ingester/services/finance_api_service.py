@@ -133,18 +133,28 @@ class FinanceApiService:
             parameters = [{"name": f"@p{i}", "value": val} for i, val in enumerate(lookup_values)]
             param_names = ", ".join(p["name"] for p in parameters)
             
-            query = f"SELECT c.VendorId FROM c WHERE c.LookupValue IN ({param_names})"
+            query = f"SELECT c.VendorId, c.Hits FROM c WHERE c.LookupValue IN ({param_names})"
             items = lookup_container.query_items(
                 query=query,
                 parameters=parameters,
-                partition_key=user_id,
-                max_item_count=1
+                partition_key=user_id
             )
             
-            vendor_id = None
+            vendor_hits = {}
+            total_hits = 0
+            
             async for item in items:
-                vendor_id = item.get("VendorId")
-                break
+                v_id = item.get("VendorId")
+                hits = item.get("Hits", 1)
+                vendor_hits[v_id] = vendor_hits.get(v_id, 0) + hits
+                total_hits += hits
+                
+            vendor_id = None
+            if vendor_hits and total_hits > 0:
+                # Find top vendor
+                top_vendor_id, top_hits = max(vendor_hits.items(), key=lambda x: x[1])
+                if top_hits / total_hits > 0.51:
+                    vendor_id = top_vendor_id
                 
             if vendor_id:
                 vendor_container = db.get_container_client("Vendors")
@@ -152,15 +162,151 @@ class FinanceApiService:
                     vendor = await vendor_container.read_item(item=vendor_id, partition_key=user_id)
                     return vendor.get("Name")
                 except Exception:
-                    return None
+                    pass
+            
+            # Fallback: check exact name match directly
+            vendor_container = db.get_container_client("Vendors")
+            query_name = f"SELECT c.Name FROM c WHERE LOWER(c.Name) IN ({param_names})"
+            items_name = vendor_container.query_items(
+                query=query_name,
+                parameters=parameters,
+                partition_key=user_id,
+                max_item_count=1
+            )
+            async for item in items_name:
+                return item.get("Name")
+                
         except Exception as e:
             import logging
             logging.warning(f"Error searching vendors by lookups: {e}")
         return None
 
+    async def ensure_vendor_and_lookups_async(self, user_id: str, vendor_name: str, lookups: list[str]) -> str | None:
+        if not self.client or not vendor_name:
+            return None
+            
+        db = self.client.get_database_client(self.db_name)
+        vendor_container = db.get_container_client("Vendors")
+        
+        # Check if vendor exists by exact name match
+        query = "SELECT * FROM c WHERE LOWER(c.Name) = @name"
+        parameters = [{"name": "@name", "value": vendor_name.lower().strip()}]
+        items = vendor_container.query_items(
+            query=query,
+            parameters=parameters,
+            partition_key=user_id,
+            max_item_count=1
+        )
+        
+        vendor_id = None
+        async for item in items:
+            vendor_id = item.get("id")
+            break
+            
+        if not vendor_id:
+            vendor_id = str(uuid7())
+            doc = {
+                "id": vendor_id,
+                "UserId": user_id,
+                "Name": vendor_name
+            }
+            await vendor_container.create_item(doc)
+            
+        if lookups:
+            lookup_container = db.get_container_client("VendorLookups")
+            normalized_lookups = list(set([loc.lower().strip() for loc in lookups if loc and isinstance(loc, str) and loc.strip()]))
+            
+            if normalized_lookups:
+                # Fetch existing lookups for this vendor that match our new lookups
+                parameters = [{"name": f"@p{i}", "value": val} for i, val in enumerate(normalized_lookups)]
+                parameters.append({"name": "@vendorId", "value": vendor_id})
+                param_names = ", ".join([f"@p{i}" for i in range(len(normalized_lookups))])
+                
+                query = f"SELECT * FROM c WHERE c.VendorId = @vendorId AND c.LookupValue IN ({param_names})"
+                
+                existing_items = lookup_container.query_items(
+                    query=query,
+                    parameters=parameters,
+                    partition_key=user_id
+                )
+                
+                existing_lookups = set()
+                async for item in existing_items:
+                    existing_lookups.add(item.get("LookupValue"))
+                    # Increment hits
+                    item["Hits"] = item.get("Hits", 1) + 1
+                    await lookup_container.upsert_item(item)
+                    
+                new_lookups = [l for l in normalized_lookups if l not in existing_lookups]
+                for new_l in new_lookups:
+                    lookup_doc = {
+                        "id": str(uuid7()),
+                        "UserId": user_id,
+                        "VendorId": vendor_id,
+                        "LookupValue": new_l,
+                        "Hits": 1
+                    }
+                    await lookup_container.create_item(lookup_doc)
+                    
+        return vendor_name
 
-
-    async def get_runbook_content_async(self, user_id: str) -> str:
+    async def create_transaction_async(self, ingestion: PendingIngestion) -> dict:
+        if not self.client:
+            raise Exception("No cosmos client available")
+            
+        db = self.client.get_database_client(self.db_name)
+        tx_container = db.get_container_client("Transactions")
+        
+        parsed = ingestion.ai_parsed
+        if not parsed.amount or not parsed.debit_account_id or not parsed.credit_account_id:
+            raise Exception("Amount, DebitAccountId, and CreditAccountId are required")
+            
+        tx_type = parsed.transaction_type or "Expense"
+        if tx_type not in ["Income", "Expense", "Transfer", "Journal"]:
+            tx_type = "Expense"
+            
+        from datetime import datetime, timezone
+        
+        tx_id = str(uuid7())
+        tx_doc = {
+            "id": tx_id,
+            "UserId": ingestion.user_id,
+            "Date": datetime.now(timezone.utc).isoformat(),
+            "Vendor": parsed.vendor,
+            "Type": tx_type,
+            "Note": parsed.notes or "",
+            "Entries": [
+                {
+                    "Id": str(uuid7()),
+                    "UserId": ingestion.user_id,
+                    "AccountId": parsed.debit_account_id,
+                    "Amount": parsed.amount
+                },
+                {
+                    "Id": str(uuid7()),
+                    "UserId": ingestion.user_id,
+                    "AccountId": parsed.credit_account_id,
+                    "Amount": -parsed.amount
+                }
+            ],
+            "IsAutoConfirmed": parsed.is_auto_confirmed if parsed.is_auto_confirmed is not None else False
+        }
+        
+        await tx_container.create_item(tx_doc)
+        
+        # Ensure Vendor and Lookups
+        lookups = []
+        if parsed.recipient_account_name: lookups.append(parsed.recipient_account_name)
+        if parsed.recipient_account_number: lookups.append(parsed.recipient_account_number)
+        if parsed.sender_account_name: lookups.append(parsed.sender_account_name)
+        if parsed.sender_account_number: lookups.append(parsed.sender_account_number)
+        if parsed.vendor: lookups.append(parsed.vendor)
+        if parsed.application: lookups.append(parsed.application)
+        
+        if parsed.vendor:
+            await self.ensure_vendor_and_lookups_async(ingestion.user_id, parsed.vendor, lookups)
+            
+        return tx_doc    async def get_runbook_content_async(self, user_id: str) -> str:
         if not self.client:
             return ""
         try:

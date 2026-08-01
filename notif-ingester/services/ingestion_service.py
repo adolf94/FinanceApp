@@ -31,6 +31,33 @@ class IngestionService:
 
     async def process_hook_async(self, hook: PhoneHookMessage) -> PendingIngestion:
         logging.info("[process_hook_async] Starting...")
+        
+        # 0. Quick AI check if it's a financial transaction
+        logging.info("[process_hook_async] 0. Checking if financial transaction...")
+        from models.pending_ingestion import AiParsedData
+        
+        is_financial = await self._ai_service.is_financial_transaction_async(hook)
+        if not is_financial:
+            logging.info("[process_hook_async] Not a financial transaction. Skipping heavy extraction.")
+            # Create a basic AiParsedData with is_financial=False
+            ai_parsed = AiParsedData(is_financial=False)
+            
+            ingestion = PendingIngestion(
+                user_id=hook.user_id,
+                hook_id=hook.id,
+                received_at=hook.received_at,
+                raw_payload=hook.raw_payload,
+                raw_msg=hook.raw_msg,
+                ai_parsed=ai_parsed,
+                similarity_score=0.0,
+                top_matches=[],
+                month_key=hook.month_key,
+                partition_key=hook.partition_key
+            )
+            ingestion.status = "NonFinancial"
+            ingestion.ttl = 7 * 24 * 60 * 60  # 7 days
+            return await self._repo.add_async(ingestion)
+
         # 1. Embed raw_msg
         logging.info("[process_hook_async] 1. Embedding raw msg...")
         query_embedding = await self._embedding_service.embed_async(hook.raw_msg)
@@ -67,6 +94,13 @@ class IngestionService:
         matched_vendor = await self._finance_api_service.search_vendors_by_lookups_async(hook.user_id, lookups)
         if matched_vendor:
             ai_parsed.vendor = matched_vendor
+            ai_parsed.vendor_matched = True
+        else:
+            if ai_parsed.confidence and ai_parsed.confidence >= self._auto_confirm_threshold and ai_parsed.debit_account_id and ai_parsed.credit_account_id and ai_parsed.vendor:
+                await self._finance_api_service.ensure_vendor_and_lookups_async(hook.user_id, ai_parsed.vendor, lookups)
+                ai_parsed.vendor_matched = True
+            else:
+                ai_parsed.vendor_matched = False
 
         # 5. Create PendingIngestion
         ingestion = PendingIngestion(
@@ -92,6 +126,7 @@ class IngestionService:
             ingestion.ttl = 7 * 24 * 60 * 60  # 7 days
         elif top_score >= self._auto_confirm_threshold and ai_parsed.transaction_type:
             try:
+                ai_parsed.is_auto_confirmed = True
                 tx = await self._finance_api_service.create_transaction_async(ingestion)
                 ingestion.status = "AutoConfirmed"
                 ingestion.transaction_id = tx["id"]
@@ -151,6 +186,13 @@ class IngestionService:
         matched_vendor = await self._finance_api_service.search_vendors_by_lookups_async(user_id, lookups)
         if matched_vendor:
             ai_parsed.vendor = matched_vendor
+            ai_parsed.vendor_matched = True
+        else:
+            if ai_parsed.confidence and ai_parsed.confidence >= self._auto_confirm_threshold and ai_parsed.debit_account_id and ai_parsed.credit_account_id and ai_parsed.vendor:
+                await self._finance_api_service.ensure_vendor_and_lookups_async(user_id, ai_parsed.vendor, lookups)
+                ai_parsed.vendor_matched = True
+            else:
+                ai_parsed.vendor_matched = False
 
         # 5. Update ingestion with new classification
         ingestion.ai_parsed = ai_parsed

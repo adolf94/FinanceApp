@@ -204,7 +204,8 @@ namespace FinanceApp.Functions
                         AccountId = aiData.CreditAccountId,
                         Amount = -aiData.Amount.Value // Negative for credit
                     }
-                }
+                },
+                IsAutoConfirmed = aiData.IsAutoConfirmed ?? false
             };
 
             try

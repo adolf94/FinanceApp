@@ -15,6 +15,7 @@ export interface Transaction {
   note?: string
   type: 'Income' | 'Expense' | 'Transfer' | 'Journal'
   entries: LedgerEntry[]
+  isAutoConfirmed?: boolean
 }
 
 export function useGetTransactions(startDate?: string, endDate?: string, accountGroupId?: string) {

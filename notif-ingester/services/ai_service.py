@@ -76,6 +76,20 @@ Rules:
 - In the 'why' explanation field, do NOT include any raw UUIDs/IDs (e.g., account IDs like '018f3a3d-...'). Refer to accounts by their human-readable names instead.
 """
 
+IS_FINANCIAL_PROMPT = """
+You are a personal finance assistant. Determine if this notification represents a financial transaction.
+A financial transaction is anything involving movement of money (e.g., payments, expenses, income, transfers, withdrawals, bills).
+General notifications, security alerts, login OTPs, promotional messages, etc., are NOT financial transactions.
+
+Notification: {raw_msg}
+Source App / Sender: {app_name}
+
+Return ONLY a boolean matching this JSON schema:
+{{
+  "is_financial": boolean
+}}
+"""
+
 class AiService:
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY", "")
@@ -188,6 +202,41 @@ Return ONLY the description text, nothing else. Don't include redundant text suc
                 return f.read()
         except FileNotFoundError:
             return "No runbook rules available."
+
+    async def is_financial_transaction_async(self, hook: PhoneHookMessage) -> bool:
+        pkg = hook.raw_payload.get("notif_pkg") or hook.raw_payload.get("sms_sender") or ""
+        app_name = pkg
+        if pkg:
+            pkg_lower = pkg.lower()
+            if "gcash" in pkg_lower:
+                app_name = "GCash"
+            elif "indivara" in pkg_lower:
+                app_name = "BPI / indivara (Vybe)"
+            elif "bpi" in pkg_lower:
+                app_name = "BPI"
+            elif "maya" in pkg_lower:
+                app_name = "Maya"
+            else:
+                app_name = pkg.split('.')[-1] if '.' in pkg else pkg
+
+        prompt = IS_FINANCIAL_PROMPT.format(
+            raw_msg=hook.raw_msg,
+            app_name=app_name
+        )
+
+        try:
+            response = self.client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config={"response_mime_type": "application/json"}
+            )
+            
+            data = json.loads(response.text)
+            return data.get("is_financial", True) # Default to true if ambiguous
+        except Exception as e:
+            logging.error(f"Error checking if financial transaction: {e}")
+            return True # If it fails, default to true to let the full flow handle it
+
 
     async def classify_async(
         self,

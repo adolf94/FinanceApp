@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useGetTransactions, useDeleteTransaction, Transaction } from '@/hooks/useTransactions'
 import { useGetAccounts } from '@/hooks/useAccounts'
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, Trash2, BookOpen, ChevronLeft, ChevronRight, Pencil, List, CalendarDays, RotateCw } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, Trash2, BookOpen, ChevronLeft, ChevronRight, Pencil, List, CalendarDays, RotateCw, Bot } from 'lucide-react'
 import dayjs from 'dayjs'
 import AddTransactionModal from '@/components/AddTransactionModal'
 import CalendarView from '@/pages/CalendarView'
@@ -162,6 +162,7 @@ export default function Transactions() {
                                     : getAccountName(tx.entries.find(e => tx.type === 'Expense' ? e.amount < 0 : e.amount > 0)?.accountId ?? '')
                                   }
                                   {tx.vendor && ` • Vendor: ${tx.vendor}`}
+                                  {tx.isAutoConfirmed && <span className="ml-2 inline-flex items-center gap-0.5 text-[9px] uppercase font-bold tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded"><Bot className="w-3 h-3" /> Auto</span>}
                                 </p>
                                 {tx.note && <p className="text-sm text-slate-600 dark:text-slate-300 italic mt-0.5">{tx.note}</p>}
                               </div>

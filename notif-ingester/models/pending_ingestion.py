@@ -21,6 +21,8 @@ class AiParsedData(BaseModel):
     application: Optional[str] = None
     why: Optional[str] = None
     user_why: Optional[str] = None
+    vendor_matched: Optional[bool] = False
+    is_auto_confirmed: Optional[bool] = False
 
 class SuggestedAccountCreation(BaseModel):
     type: Optional[str] = None

@@ -8,5 +8,6 @@ namespace FinanceApp.Models
         public string UserId { get; set; } = string.Empty;
         public string VendorId { get; set; } = string.Empty;
         public string LookupValue { get; set; } = string.Empty;
+        public int Hits { get; set; } = 1;
     }
 }

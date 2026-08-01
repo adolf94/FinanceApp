@@ -25,6 +25,8 @@ export interface AiParsedData {
   application?: string | null
   why?: string | null
   user_why?: string | null
+  vendor_matched?: boolean | null
+  is_auto_confirmed?: boolean | null
 }
 
 export interface PendingIngestion {

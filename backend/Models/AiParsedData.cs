@@ -54,6 +54,12 @@ namespace FinanceApp.Models
 
         [JsonPropertyName("user_why")]
         public string? UserWhy { get; set; }
+
+        [JsonPropertyName("is_auto_confirmed")]
+        public bool? IsAutoConfirmed { get; set; }
+
+        [JsonPropertyName("vendor_matched")]
+        public bool? VendorMatched { get; set; }
     }
 
     public class SuggestedAccountCreation

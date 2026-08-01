@@ -51,25 +51,32 @@ namespace FinanceApp.Repositories
 
             if (!normalizedLookups.Any()) return;
 
-            var existingLookups = await _context.VendorLookups
+            var existingEntities = await _context.VendorLookups
                 .WithPartitionKey(userId)
-                .Where(vl => normalizedLookups.Contains(vl.LookupValue))
-                .Select(vl => vl.LookupValue)
+                .Where(vl => vl.VendorId == vendorId && normalizedLookups.Contains(vl.LookupValue))
                 .ToListAsync();
 
-            var newLookups = normalizedLookups.Except(existingLookups).ToList();
+            foreach (var entity in existingEntities)
+            {
+                entity.Hits += 1;
+                _context.VendorLookups.Update(entity);
+            }
+
+            var existingValues = existingEntities.Select(e => e.LookupValue).ToHashSet();
+            var newLookups = normalizedLookups.Except(existingValues).ToList();
             if (newLookups.Any())
             {
                 var entities = newLookups.Select(l => new VendorLookup
                 {
                     UserId = userId,
                     VendorId = vendorId,
-                    LookupValue = l
+                    LookupValue = l,
+                    Hits = 1
                 });
 
                 await _context.VendorLookups.AddRangeAsync(entities);
-                await _context.SaveChangesAsync();
             }
+            await _context.SaveChangesAsync();
         }
     }
 }
