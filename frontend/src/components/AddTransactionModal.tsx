@@ -4,9 +4,10 @@ import { useGetAccounts, useGetAccountGroups, useCreateAccountGroup, useCreateAc
 import { useGetVendors, useCreateVendor } from '@/hooks/useVendors'
 import { useCreateTransaction, useUpdateTransaction, Transaction, LedgerEntry } from '@/hooks/useTransactions'
 import { useCreateRecurringTransaction } from '@/hooks/useRecurringTransactions'
-import { useConfirmIngestion, useReclassifyIngestion, PendingIngestion } from '@/hooks/useIngestions'
+import { useConfirmIngestion, useReclassifyIngestion, useUpdateIngestionVendor, PendingIngestion, useGetIngestionById, useLearnIngestion } from '@/hooks/useIngestions'
 import { useQueryClient } from '@tanstack/react-query'
 import { uuidv7 } from 'uuidv7'
+import dayjs from 'dayjs'
 import Combobox from './ui/Combobox'
 import CalculatorInput from './ui/CalculatorInput'
 
@@ -33,9 +34,10 @@ interface AddTransactionModalProps {
   initialData?: Transaction | null
   ingestionId?: string | null
   ingestion?: PendingIngestion | null
+  onSave?: (date: string) => void
 }
 
-export default function AddTransactionModal({ isOpen, onClose, initialData, ingestionId, ingestion }: AddTransactionModalProps) {
+export default function AddTransactionModal({ isOpen, onClose, initialData, ingestionId, ingestion: ingestionProp, onSave }: AddTransactionModalProps) {
   const { data: accounts = [] } = useGetAccounts()
   const { data: accountGroups = [] } = useGetAccountGroups()
   const { data: dbVendors = [] } = useGetVendors()
@@ -48,7 +50,14 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
   const generateDescriptionMutation = useGenerateAccountDescription()
   const confirmIngestionMutation = useConfirmIngestion()
   const reclassifyMutation = useReclassifyIngestion()
+  const updateIngestionVendorMutation = useUpdateIngestionVendor()
+  const learnIngestionMutation = useLearnIngestion()
   const queryClient = useQueryClient()
+
+  const targetIngestionId = ingestionId || initialData?.ingestionId
+  const { data: fetchedIngestion } = useGetIngestionById(targetIngestionId)
+  
+  const ingestion = ingestionProp || fetchedIngestion
 
   const [pendingNewAccount, setPendingNewAccount] = useState<{
     name: string;
@@ -75,7 +84,7 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
     if (pkgLower.includes('indivara')) return 'BPI / indivara (Vybe)'
     if (pkgLower.includes('bpi')) return 'BPI'
     if (pkgLower.includes('maya')) return 'Maya'
-    return pkg.split('.').pop() ?? pkg
+    return pkg
   }
 
   const [mode, setMode] = useState<'Simple' | 'Advanced'>('Simple')
@@ -99,9 +108,13 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
   ])
 
   const [vendor, setVendor] = useState('')
+  const [date, setDate] = useState(
+    initialData
+      ? dayjs(initialData.date).format('YYYY-MM-DDTHH:mm')
+      : (ingestion ? dayjs(ingestion.received_at || undefined).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm'))
+  )
   const [note, setNote] = useState('')
   const [userWhy, setUserWhy] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
 
   // Recurring options
   const [isRecurring, setIsRecurring] = useState(false)
@@ -155,6 +168,25 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
     }
   };
 
+  const handleGenerateSuggestionDescription = async () => {
+    if (!editingSuggestion || !editingSuggestion.data.name || !ingestion) return;
+    try {
+      const { description } = await generateDescriptionMutation.mutateAsync({
+        name: editingSuggestion.data.name,
+        type: editingSuggestion.data.type || '',
+        groupName: editingSuggestion.data.account_group,
+        context: ingestion.raw_msg
+      });
+      setEditingSuggestion({
+        ...editingSuggestion,
+        data: { ...editingSuggestion.data, description }
+      });
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate description.");
+    }
+  };
+
   const handleSavePendingAccount = () => {
     if (!pendingNewAccount) return;
     createAccountMutation.mutate({
@@ -187,7 +219,7 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
     setVendor('')
     setNote('')
     setUserWhy('')
-    setDate(new Date().toISOString().split('T')[0])
+    setDate(dayjs().format('YYYY-MM-DDTHH:mm'))
     setIsRecurring(false)
     setFrequency('Monthly')
     setMaxOccurrences('')
@@ -206,12 +238,24 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
     }
   }, [ingestion])
 
+  const prevInitialDataStr = useRef<string | null>(null)
+  const isOpenPrev = useRef<boolean>(false)
+
   useEffect(() => {
+    const dataStr = initialData ? JSON.stringify(initialData) : null
+    const justOpened = isOpen && !isOpenPrev.current
+    isOpenPrev.current = isOpen
+
     if (isOpen) {
+      if (!justOpened && prevInitialDataStr.current === dataStr) {
+        return
+      }
+      prevInitialDataStr.current = dataStr
+
       if (initialData) {
         setMode(initialData.type === 'Journal' ? 'Advanced' : 'Simple')
-        setType(initialData.type !== 'Journal' ? initialData.type : 'Expense')
-        setDate(initialData.date.split('T')[0])
+        setType(initialData.type)
+        setDate(dayjs(initialData.date).format('YYYY-MM-DDTHH:mm'))
         setNote(initialData.note || '')
         setVendor(initialData.vendor || '')
 
@@ -256,12 +300,16 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
           }
         }
       } else {
-        resetForm()
+        if (justOpened) resetForm()
       }
-      setUserWhy(ingestion?.user_confirmed?.user_why || '')
+      if (justOpened || prevInitialDataStr.current !== dataStr) {
+        setUserWhy(ingestion?.user_confirmed?.user_why || '')
+      }
+    } else {
+      prevInitialDataStr.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialData])
+  }, [isOpen, initialData, accounts])
 
   // Combine DB Vendors with presets - memoized for performance
   const vendorOptions = useMemo(() => dbVendors.map((v) => v.name), [dbVendors])
@@ -431,7 +479,7 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
       // Do NOT return here. We want execution to continue and create the immediate transaction!
     }
 
-    if (ingestionId) {
+      if (ingestionId) {
       confirmIngestionMutation.mutate({
         id: ingestionId,
         userConfirmed: {
@@ -441,10 +489,12 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
           debit_account_id: type === 'Transfer' ? toAccountId : splits[0].subCategoryId,
           credit_account_id: sourceAccountId,
           notes: note || null,
-          user_why: userWhy || null
+          user_why: userWhy || null,
+          date: dayjs(date).toISOString()
         }
       }, {
         onSuccess: () => {
+          onSave?.(dayjs(date).toISOString())
           onClose()
           resetForm()
         }
@@ -459,13 +509,14 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
       entries,
       vendor: type === 'Transfer' ? null : finalVendor,
       note,
-      date: new Date(date).toISOString(),
+      date: dayjs(date).toISOString(),
     }
 
     const mutation = initialData ? updateTxMutation : createTxMutation
 
     mutation.mutate(transaction, {
       onSuccess: () => {
+        onSave?.(dayjs(date).toISOString())
         if (submitTypeRef.current === 'more') {
           setTotalAmount('')
           setSplits([{ id: generateId(), categoryId: '', subCategoryId: '', amount: '' }])
@@ -482,7 +533,7 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
         }
       },
     })
-  }, [mode, date, journalLines, totalAmount, sourceAccountId, type, toAccountId, splits, vendor, dbVendors, note, userWhy, initialData, ingestionId, createTxMutation, updateTxMutation, createVendorMutation, resetForm, onClose, isRecurring, frequency, maxOccurrences, createRecurringTxMutation, confirmIngestionMutation])
+  }, [mode, date, journalLines, totalAmount, sourceAccountId, type, toAccountId, splits, vendor, dbVendors, note, userWhy, initialData, ingestionId, createTxMutation, updateTxMutation, createVendorMutation, resetForm, onClose, onSave, isRecurring, frequency, maxOccurrences, createRecurringTxMutation, confirmIngestionMutation])
 
   if (!isOpen) return null
 
@@ -705,25 +756,6 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                     </div>
                   )}
 
-                  {/* Vendor Dropdown (Only for Expense) */}
-                  {type === 'Expense' && (
-                    <div className="flex flex-col gap-1 mt-2">
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vendor</label>
-                      <Combobox
-                        options={vendorOptions.filter(v => v !== 'Other / Custom').map(v => ({ value: v, label: v }))}
-                        value={vendor}
-                        onChange={(val) => setVendor(val)}
-                        onCreate={(val) => {
-                          createVendorMutation.mutate(val, {
-                            onSuccess: () => {
-                              setVendor(val)
-                            }
-                          })
-                        }}
-                        placeholder="Select Vendor (optional)..."
-                      />
-                    </div>
-                  )}
                 </>
               ) : (
                 /* Advanced Mode: Journal Entry */
@@ -824,12 +856,32 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                 </div>
               )}
 
-              {/* Shared Date and Note for both modes */}
+              {/* Shared Vendor, Date, and Note for both modes */}
+              <div className="flex flex-col gap-1 mt-2">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vendor / Payer</label>
+                <Combobox
+                  options={vendorOptions.filter(v => v !== 'Other / Custom').map(v => ({ value: v, label: v }))}
+                  value={vendor}
+                  onChange={(val) => {
+                    setVendor(val)
+                    if (ingestion) updateIngestionVendorMutation.mutate({ id: ingestion.id, vendor: val })
+                  }}
+                  onCreate={(val) => {
+                    createVendorMutation.mutate(val, {
+                      onSuccess: () => {
+                        setVendor(val)
+                        if (ingestion) updateIngestionVendorMutation.mutate({ id: ingestion.id, vendor: val })
+                      }
+                    })
+                  }}
+                  placeholder="Select Vendor / Payer (optional)..."
+                />
+              </div>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</label>
                   <input
-                    type="date"
+                    type="datetime-local"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     required
@@ -838,12 +890,12 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Note</label>
-                  <input
-                    type="text"
+                  <textarea
                     placeholder="Note (optional)"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    className="min-h-[44px] px-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full"
+                    className="min-h-[44px] p-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full text-sm resize-y"
+                    rows={2}
                   />
                 </div>
               </div>
@@ -852,10 +904,10 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                 <div className="flex flex-col gap-1 mt-2">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Correction Reason / Notes (Why)</label>
                   <textarea
-                    placeholder="Describe why you are correcting this or what the rule is..."
+                    placeholder="Describe adjustments or rules to be set against the AI reasoning..."
                     value={userWhy}
                     onChange={(e) => setUserWhy(e.target.value)}
-                    className="p-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full text-sm focus:outline-none focus:border-blue-600"
+                    className="p-3 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 w-full text-sm focus:outline-none focus:border-blue-600 resize-y"
                     rows={2}
                   />
                 </div>
@@ -997,6 +1049,7 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                               createVendorMutation.mutate(ingestion.ai_parsed.vendor!, {
                                 onSuccess: () => {
                                   setVendor(ingestion.ai_parsed.vendor!)
+                                  updateIngestionVendorMutation.mutate({ id: ingestion.id, vendor: ingestion.ai_parsed.vendor! })
                                 }
                               })
                             }}
@@ -1051,12 +1104,26 @@ export default function AddTransactionModal({ isOpen, onClose, initialData, inge
                                         <option key={t} value={t}>{t}</option>
                                       ))}
                                     </select>
-                                    <input
-                                      value={editingSuggestion.data.description || ''}
-                                      onChange={e => setEditingSuggestion({ ...editingSuggestion, data: { ...editingSuggestion.data, description: e.target.value } })}
-                                      className="text-xs px-2 py-1 rounded border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                                      placeholder="Description (optional)"
-                                    />
+                                    <div className="flex flex-col gap-1 w-full">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500 font-semibold uppercase">Description</span>
+                                        <button
+                                          type="button"
+                                          onClick={handleGenerateSuggestionDescription}
+                                          disabled={generateDescriptionMutation.isPending || !editingSuggestion.data.name}
+                                          className="text-[9px] flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50"
+                                        >
+                                          <Sparkles className="w-3 h-3" />
+                                          {generateDescriptionMutation.isPending ? 'Generating...' : 'AI Generate'}
+                                        </button>
+                                      </div>
+                                      <input
+                                        value={editingSuggestion.data.description || ''}
+                                        onChange={e => setEditingSuggestion({ ...editingSuggestion, data: { ...editingSuggestion.data, description: e.target.value } })}
+                                        className="text-xs px-2 py-1 rounded border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white w-full"
+                                        placeholder="Description (optional)"
+                                      />
+                                    </div>
                                   </div>
                                 ) : (
                                   <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">

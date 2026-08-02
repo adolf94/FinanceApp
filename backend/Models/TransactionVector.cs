@@ -22,6 +22,9 @@ namespace FinanceApp.Models
         [JsonPropertyName("category")]
         public string Category { get; set; } = string.Empty;
 
+        [JsonPropertyName("summary")]
+        public string Summary { get; set; } = string.Empty;
+
         [JsonPropertyName("debit_account_id")]
         public string DebitAccountId { get; set; } = string.Empty;
 

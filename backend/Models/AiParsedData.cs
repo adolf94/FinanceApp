@@ -28,6 +28,9 @@ namespace FinanceApp.Models
         [JsonPropertyName("notes")]
         public string? Notes { get; set; }
 
+        [JsonPropertyName("summary")]
+        public string? Summary { get; set; }
+
         [JsonPropertyName("confidence")]
         public double? Confidence { get; set; }
 
@@ -58,8 +61,14 @@ namespace FinanceApp.Models
         [JsonPropertyName("is_auto_confirmed")]
         public bool? IsAutoConfirmed { get; set; }
 
+        [JsonPropertyName("ingestion_id")]
+        public string? IngestionId { get; set; }
+
         [JsonPropertyName("vendor_matched")]
         public bool? VendorMatched { get; set; }
+
+        [JsonPropertyName("date")]
+        public DateTime? Date { get; set; }
     }
 
     public class SuggestedAccountCreation

@@ -184,7 +184,7 @@ namespace FinanceApp.Functions
             {
                 Id = Guid.CreateVersion7().ToString(),
                 UserId = userId,
-                Date = DateTime.UtcNow,
+                Date = aiData.Date ?? DateTime.UtcNow,
                 Vendor = aiData.Vendor,
                 Type = Enum.TryParse<TransactionType>(aiData.TransactionType, true, out var typeEnum) ? typeEnum : TransactionType.Expense,
                 Note = aiData.Notes,
@@ -205,7 +205,8 @@ namespace FinanceApp.Functions
                         Amount = -aiData.Amount.Value // Negative for credit
                     }
                 },
-                IsAutoConfirmed = aiData.IsAutoConfirmed ?? false
+                IsAutoConfirmed = aiData.IsAutoConfirmed ?? false,
+                IngestionId = aiData.IngestionId
             };
 
             try

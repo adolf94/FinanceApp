@@ -14,9 +14,11 @@ export default function PendingIngestions() {
 
   const mappedIngestionTransaction = useMemo(() => {
     return confirmingIngestion ? {
-      type: confirmingIngestion.ai_parsed.transaction_type === 'Income' ? 'Income' : 'Expense',
+      type: ['Income', 'Expense', 'Transfer'].includes(confirmingIngestion.ai_parsed.transaction_type || '') 
+        ? confirmingIngestion.ai_parsed.transaction_type 
+        : 'Expense',
       vendor: confirmingIngestion.ai_parsed.vendor || '',
-      note: confirmingIngestion.ai_parsed.notes || confirmingIngestion.raw_msg,
+      note: confirmingIngestion.ai_parsed.summary || confirmingIngestion.ai_parsed.notes || '',
       date: confirmingIngestion.received_at,
       entries: [
         {

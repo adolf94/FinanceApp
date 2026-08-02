@@ -29,6 +29,48 @@ class IngestionService:
     def ingestion_repo(self) -> IIngestionRepository:
         return self._repo
 
+    def _build_lookups(self, ai_parsed, accounts: list[dict]) -> list[str]:
+        raw_lookups = [getattr(ai_parsed, 'vendor', None)]
+        
+        tx_type = getattr(ai_parsed, 'transaction_type', None)
+        if tx_type == "Expense":
+            raw_lookups.extend([
+                getattr(ai_parsed, 'recipient_account_name', None),
+                getattr(ai_parsed, 'recipient_account_number', None)
+            ])
+        elif tx_type == "Income":
+            raw_lookups.extend([
+                getattr(ai_parsed, 'sender_account_name', None),
+                getattr(ai_parsed, 'sender_account_number', None)
+            ])
+        
+        lookups = [loc.strip() for loc in raw_lookups if loc and isinstance(loc, str) and loc.strip()]
+        
+        stop_words = {
+            "mastercard", "master-card", "visa", "gcash", "paymaya", "maya", 
+            "credit card", "debit card", "bdo", "bpi", "unionbank", "metrobank",
+            "instapay", "pesonet", "credit", "debit", "bank"
+        }
+        
+        account_exclusions = set()
+        if accounts:
+            for acc in accounts:
+                if acc.get("account_number"):
+                    account_exclusions.add(str(acc["account_number"]).lower().strip())
+                if acc.get("name"):
+                    account_exclusions.add(str(acc["name"]).lower().strip())
+                    
+        clean_lookups = []
+        for loc in lookups:
+            loc_lower = loc.lower()
+            if loc_lower in stop_words:
+                continue
+            if loc_lower in account_exclusions:
+                continue
+            clean_lookups.append(loc)
+            
+        return clean_lookups
+
     async def process_hook_async(self, hook: PhoneHookMessage) -> PendingIngestion:
         logging.info("[process_hook_async] Starting...")
         
@@ -65,7 +107,7 @@ class IngestionService:
         # 2. Find similar past transactions
         logging.info("[process_hook_async] 2. Finding similar transactions...")
         similar_vectors = await self._vector_service.find_similar_async(
-            query_embedding, hook.user_id, top_k=3
+            query_embedding, hook.user_id, top_k=5
         )
         top_score = similar_vectors[0][1] if similar_vectors else 0.0
 
@@ -78,19 +120,15 @@ class IngestionService:
         if not runbook_content:
             runbook_content = self._ai_service.get_default_runbook_content()
 
+        logging.info("[process_hook_async] 3c. Fetching vendors...")
+        vendors = await self._finance_api_service.get_vendors_async(hook.user_id)
+
         # 4. Classify via LLM
         logging.info("[process_hook_async] 4. Classifying via LLM...")
-        ai_parsed = await self._ai_service.classify_async(hook, similar_vectors, accounts, runbook_content)
+        ai_parsed = await self._ai_service.classify_async(hook, similar_vectors, accounts, runbook_content, vendors)
         
         # 4.5 Automatically map vendor from lookups
-        lookups = [
-            getattr(ai_parsed, 'recipient_account_name', None),
-            getattr(ai_parsed, 'recipient_account_number', None),
-            getattr(ai_parsed, 'sender_account_name', None),
-            getattr(ai_parsed, 'sender_account_number', None),
-            getattr(ai_parsed, 'vendor', None),
-            getattr(ai_parsed, 'application', None)
-        ]
+        lookups = self._build_lookups(ai_parsed, accounts)
         matched_vendor = await self._finance_api_service.search_vendors_by_lookups_async(hook.user_id, lookups)
         if matched_vendor:
             ai_parsed.vendor = matched_vendor
@@ -121,10 +159,18 @@ class IngestionService:
         )
 
         # 6. Auto-confirm logic
+        is_confident = (
+            ai_parsed.confidence is not None
+            and ai_parsed.confidence >= self._auto_confirm_threshold
+            and ai_parsed.vendor_matched
+            and ai_parsed.debit_account_id
+            and ai_parsed.credit_account_id
+        )
+
         if ai_parsed.is_financial is False:
             ingestion.status = "NonFinancial"
             ingestion.ttl = 7 * 24 * 60 * 60  # 7 days
-        elif top_score >= self._auto_confirm_threshold and ai_parsed.transaction_type:
+        elif (top_score >= self._auto_confirm_threshold or is_confident) and ai_parsed.transaction_type:
             try:
                 ai_parsed.is_auto_confirmed = True
                 tx = await self._finance_api_service.create_transaction_async(ingestion)
@@ -172,17 +218,10 @@ class IngestionService:
             raw_payload=ingestion.raw_payload,
             user_id=user_id
         )
-        ai_parsed = await self._ai_service.classify_async(hook_like, similar_vectors, accounts, runbook_content)
+        ai_parsed = await self._ai_service.classify_async(hook_like, similar_vectors, accounts, runbook_content, vendors)
 
         # 4.5 Automatically map vendor from lookups
-        lookups = [
-            getattr(ai_parsed, 'recipient_account_name', None),
-            getattr(ai_parsed, 'recipient_account_number', None),
-            getattr(ai_parsed, 'sender_account_name', None),
-            getattr(ai_parsed, 'sender_account_number', None),
-            getattr(ai_parsed, 'vendor', None),
-            getattr(ai_parsed, 'application', None)
-        ]
+        lookups = self._build_lookups(ai_parsed, accounts)
         matched_vendor = await self._finance_api_service.search_vendors_by_lookups_async(user_id, lookups)
         if matched_vendor:
             ai_parsed.vendor = matched_vendor
@@ -200,6 +239,8 @@ class IngestionService:
         ingestion.top_matches = [{
             "vendor": v.vendor,
             "category": v.category,
+            "debit_account_id": v.debit_account_id,
+            "credit_account_id": v.credit_account_id,
             "score": score
         } for v, score in similar_vectors]
         ingestion.status = "Pending"
@@ -215,29 +256,11 @@ class IngestionService:
         if user_confirmed:
             ingestion.user_confirmed = user_confirmed
         
-        # AI in the loop to update the runbook based on response, transaction data, notification etc.
         user_why = user_confirmed.get("user_why") if user_confirmed else None
         if user_why:
-            try:
-                logging.info(f"[confirm_ingestion_async] Running AI Runbook synthesis for user feedback...")
-                # Fetch current runbook
-                current_runbook = await self._finance_api_service.get_runbook_content_async(user_id)
-                if not current_runbook:
-                    current_runbook = self._ai_service.get_default_runbook_content()
-                
-                # Synthesize new runbook
-                updated_runbook = await self._ai_service.update_runbook_with_feedback_async(
-                    raw_msg=ingestion.raw_msg,
-                    ai_parsed=ingestion.ai_parsed.model_dump(),
-                    user_confirmed=user_confirmed,
-                    user_why=user_why,
-                    current_runbook=current_runbook
-                )
-                
-                # Save updated runbook to Cosmos DB
-                await self._finance_api_service.save_runbook_content_async(user_id, updated_runbook)
-            except Exception as e:
-                logging.error(f"Failed to update runbook with AI feedback: {e}")
+            # Note: We no longer auto-update the runbook here. 
+            # It's queued for manual review in Settings > Runbook Review.
+            pass
 
         # Learn from it
         await self.embed_and_learn_async(ingestion)
@@ -288,6 +311,7 @@ class IngestionService:
             transaction_id=ingestion.transaction_id or "",
             vendor=vendor,
             category=category,
+            summary=parsed.get("notes") or parsed.get("summary") or "",
             debit_account_id=parsed.get("debit_account_id", ""),
             credit_account_id=parsed.get("credit_account_id", ""),
             embed_text=embed_text,

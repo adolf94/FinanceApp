@@ -119,6 +119,29 @@ class FinanceApiService:
             
         return accounts
 
+    async def get_vendors_async(self, user_id: str) -> list[str]:
+        if not self.client:
+            return []
+            
+        db = self.client.get_database_client(self.db_name)
+        try:
+            vendor_container = db.get_container_client("Vendors")
+            query = "SELECT c.Name FROM c"
+            items = vendor_container.query_items(
+                query=query,
+                partition_key=user_id
+            )
+            vendors = []
+            async for item in items:
+                name = item.get("Name")
+                if name:
+                    vendors.append(name)
+            return sorted(list(set(vendors)))
+        except Exception as e:
+            import logging
+            logging.warning(f"Error fetching vendors: {e}")
+            return []
+
     async def search_vendors_by_lookups_async(self, user_id: str, lookups: list[str]) -> str | None:
         if not self.client or not lookups:
             return None
@@ -256,6 +279,7 @@ class FinanceApiService:
             
         db = self.client.get_database_client(self.db_name)
         tx_container = db.get_container_client("Transactions")
+        accounts_container = db.get_container_client("Accounts")
         
         parsed = ingestion.ai_parsed
         if not parsed.amount or not parsed.debit_account_id or not parsed.credit_account_id:
@@ -268,33 +292,61 @@ class FinanceApiService:
         from datetime import datetime, timezone
         
         tx_id = str(uuid7())
+        
+        # 1. Create the main Transaction document (EF Core format)
+        tx_date = parsed.date or ingestion.received_at or datetime.now(timezone.utc)
         tx_doc = {
             "id": tx_id,
             "UserId": ingestion.user_id,
-            "Date": datetime.now(timezone.utc).isoformat(),
+            "Date": tx_date.isoformat(),
             "Vendor": parsed.vendor,
             "Type": tx_type,
             "Note": parsed.notes or "",
-            "Entries": [
-                {
-                    "Id": str(uuid7()),
-                    "UserId": ingestion.user_id,
-                    "AccountId": parsed.debit_account_id,
-                    "Amount": parsed.amount
-                },
-                {
-                    "Id": str(uuid7()),
-                    "UserId": ingestion.user_id,
-                    "AccountId": parsed.credit_account_id,
-                    "Amount": -parsed.amount
-                }
-            ],
-            "IsAutoConfirmed": parsed.is_auto_confirmed if parsed.is_auto_confirmed is not None else False
+            "IsAutoConfirmed": parsed.is_auto_confirmed if parsed.is_auto_confirmed is not None else False,
+            "IngestionId": ingestion.id,
+            "$type": "Transaction"
         }
         
         await tx_container.create_item(tx_doc)
         
-        # Ensure Vendor and Lookups
+        # 2. Create the LedgerEntry documents (EF Core format)
+        debit_entry = {
+            "id": str(uuid7()),
+            "UserId": ingestion.user_id,
+            "TransactionId": tx_id,
+            "AccountId": parsed.debit_account_id,
+            "Amount": parsed.amount,
+            "$type": "LedgerEntry"
+        }
+        
+        credit_entry = {
+            "id": str(uuid7()),
+            "UserId": ingestion.user_id,
+            "TransactionId": tx_id,
+            "AccountId": parsed.credit_account_id,
+            "Amount": -parsed.amount,
+            "$type": "LedgerEntry"
+        }
+        
+        await tx_container.create_item(debit_entry)
+        await tx_container.create_item(credit_entry)
+        
+        # 3. Update the Account balances
+        try:
+            # Debit Account
+            debit_account = await accounts_container.read_item(parsed.debit_account_id, partition_key=ingestion.user_id)
+            debit_account["CurrentBalance"] = debit_account.get("CurrentBalance", 0) + parsed.amount
+            await accounts_container.replace_item(parsed.debit_account_id, debit_account)
+            
+            # Credit Account
+            credit_account = await accounts_container.read_item(parsed.credit_account_id, partition_key=ingestion.user_id)
+            credit_account["CurrentBalance"] = credit_account.get("CurrentBalance", 0) - parsed.amount
+            await accounts_container.replace_item(parsed.credit_account_id, credit_account)
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to update account balances: {e}")
+            
+        # 4. Ensure Vendor and Lookups
         lookups = []
         if parsed.recipient_account_name: lookups.append(parsed.recipient_account_name)
         if parsed.recipient_account_number: lookups.append(parsed.recipient_account_number)
@@ -330,3 +382,58 @@ class FinanceApiService:
             "content": content
         }
         await container.upsert_item(doc)
+
+    async def update_account_descriptions_async(self, user_id: str, updates: list[dict]) -> None:
+        if not self.client or not updates:
+            return
+            
+        db = self.client.get_database_client(self.db_name)
+        container = db.get_container_client("Accounts")
+        
+        for update in updates:
+            account_id = update.get("account_id")
+            new_description = update.get("new_description")
+            if not account_id or not new_description:
+                continue
+                
+            try:
+                item = await container.read_item(item=account_id, partition_key=user_id)
+                item["Description"] = new_description
+                item["description"] = new_description # Ensure both cases just in case
+                await container.upsert_item(item)
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to update account {account_id} description: {e}")
+
+    async def get_runbook_session_async(self, user_id: str) -> dict | None:
+        """Fetch an active runbook review session from the Settings container."""
+        if not self.client:
+            return None
+        try:
+            db = self.client.get_database_client(self.db_name)
+            container = db.get_container_client("Settings")
+            item = await container.read_item(item="runbook-review-session", partition_key=user_id)
+            return item
+        except Exception:
+            return None
+
+    async def save_runbook_session_async(self, user_id: str, session: dict) -> None:
+        """Upsert a runbook review session into the Settings container."""
+        if not self.client:
+            return
+        db = self.client.get_database_client(self.db_name)
+        container = db.get_container_client("Settings")
+        session["id"] = "runbook-review-session"
+        session["UserId"] = user_id
+        await container.upsert_item(session)
+
+    async def delete_runbook_session_async(self, user_id: str) -> None:
+        """Delete the active runbook review session from the Settings container."""
+        if not self.client:
+            return
+        try:
+            db = self.client.get_database_client(self.db_name)
+            container = db.get_container_client("Settings")
+            await container.delete_item(item="runbook-review-session", partition_key=user_id)
+        except Exception:
+            pass  # Already gone — that's fine

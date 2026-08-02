@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Plus, Trash2, Tag, Store, Bell, X, Edit, History, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Tag, Store, Bell, X, Edit, History, Sparkles, BookOpen } from 'lucide-react'
 import dayjs from 'dayjs'
 import ConfirmationModal from '@/components/ui/ConfirmationModal'
 import AddTransactionModal from '@/components/AddTransactionModal'
@@ -21,8 +21,13 @@ import {
   useDeleteVendor,
 } from '@/hooks/useVendors'
 
+import { useGetRunbookCorrections, useGetRunbookSession } from '@/hooks/useRunbookReview'
+import { RunbookReviewModal } from '@/components/RunbookReviewModal'
+import { useQuery } from '@tanstack/react-query'
+import apiClient from '@/lib/apiClient'
+
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'categories' | 'vendors' | 'notifications' | 'historicalLogs'>('categories')
+  const [activeTab, setActiveTab] = useState<'categories' | 'vendors' | 'notifications' | 'historicalLogs' | 'runbook'>('categories')
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
@@ -80,6 +85,18 @@ export default function Settings() {
             <History className="w-4 h-4" /> Historical Logs
           </div>
         </button>
+        <button
+          onClick={() => setActiveTab('runbook')}
+          className={`pb-3 px-4 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 ${
+            activeTab === 'runbook'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" /> Runbook Review
+          </div>
+        </button>
       </div>
 
       <div className="p-4 overflow-y-auto">
@@ -87,6 +104,7 @@ export default function Settings() {
         {activeTab === 'vendors' && <VendorsSettings />}
         {activeTab === 'notifications' && <NotificationLogSettings />}
         {activeTab === 'historicalLogs' && <HistoricalLogsSettings />}
+        {activeTab === 'runbook' && <RunbookReviewSettings />}
       </div>
     </div>
   )
@@ -383,7 +401,7 @@ function NotificationLogSettings() {
   const mappedIngestionTransaction = confirmingIngestion ? {
     type: confirmingIngestion.ai_parsed.transaction_type === 'Income' ? 'Income' : 'Expense',
     vendor: confirmingIngestion.ai_parsed.vendor || '',
-    note: confirmingIngestion.ai_parsed.notes || confirmingIngestion.raw_msg,
+    note: confirmingIngestion.ai_parsed.summary || confirmingIngestion.ai_parsed.notes || '',
     date: confirmingIngestion.received_at,
     entries: [
       {
@@ -474,3 +492,83 @@ function HistoricalLogsSettings() {
     </div>
   )
 }
+
+function RunbookReviewSettings() {
+  const { data: corrections = [], isLoading } = useGetRunbookCorrections()
+  const { data: session } = useGetRunbookSession()
+  const hasActiveSession = !!session
+  const { data: runbookRes } = useQuery({
+    queryKey: ['runbook_content'],
+    queryFn: async () => {
+      const res = await apiClient.get('/runbook')
+      return res.data
+    }
+  })
+  const currentRunbook = runbookRes?.content || ""
+
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  if (isLoading) return <div className="p-8 text-center text-slate-500">Loading pending corrections...</div>
+
+  return (
+    <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full pb-8">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-indigo-500" />
+              Pending Runbook Corrections
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Review and apply AI-suggested updates to your Runbook based on recent corrections.
+            </p>
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            disabled={corrections.length === 0 && !hasActiveSession}
+            className="relative flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
+          >
+            {hasActiveSession && (
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" title="Active session" />
+            )}
+            {hasActiveSession ? 'Resume Session' : 'Review Changes'}
+          </button>
+        </div>
+
+        {corrections.length === 0 ? (
+          <div className="text-center py-12 text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+            No pending corrections to review.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {corrections.map(c => (
+              <div key={c.id} className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{c.user_confirmed?.vendor || c.ai_parsed?.vendor || 'Unknown Vendor'}</div>
+                  <div className="text-xs text-slate-500">{dayjs(c.received_at).format('MMM D, YYYY h:mm A')}</div>
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+                  <span className="font-semibold">Original AI:</span> {c.ai_parsed?.transaction_type} • {c.ai_parsed?.category}
+                </div>
+                <div className="text-sm text-indigo-600 dark:text-indigo-400 mb-2 font-medium">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">Your Correction:</span> {c.user_confirmed?.transaction_type} • {c.user_confirmed?.category}
+                </div>
+                <div className="text-sm bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-2 rounded flex gap-2">
+                  <span className="font-semibold">Reason:</span> {c.user_confirmed?.user_why || 'No reason provided'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <RunbookReviewModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        corrections={corrections}
+        currentRunbook={currentRunbook}
+      />
+    </div>
+  )
+}
+

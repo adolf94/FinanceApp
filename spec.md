@@ -1,5 +1,7 @@
 # Product Specification Document: Personal Finance App
 
+**Last Updated:** 2026-08-02 (Commit: 0db4a2d)
+
 ## 1. Product Vision & Objective
 **Objective:** Create a mobile-first personal finance application that allows users to seamlessly track income, expenses, and account balances, functioning as a robust personal accounting tool. The focus is strictly on historical tracking of transactions rather than forward-looking budgeting.
 
@@ -37,9 +39,14 @@ Users need a structured way to mirror their real-world financial accounts within
 ### 2.4. Data Entry & Automation
 - **Smart Categorization:** Learns from manual entries to suggest categories based on past transaction vectors using cosine-similarity retrieval.
 - **Automated Data Capture via Notification Ingester:** A dedicated Python Azure Functions microservice (`notif-ingester/`) handles incoming phone notifications and auto-creates pending transactions:
-  1. **Receive:** A mobile notification payload is `POST`ed to `/phone_hook` and saved to the `PhoneHookMessages` CosmosDB container with `status = "received"`.
-  2. **Classify:** A Cosmos DB Change Feed trigger fires, embeds the raw notification text using Gemini `text-embedding-004`, retrieves top-3 similar past transactions via cosine similarity, then sends the full context (notification + similar transactions + RUNBOOK.md rules) to Gemini for structured classification into a `PendingIngestion` document (`status = "Pending"`).
-  3. **Confirm:** The user reviews the AI suggestion and confirms via `POST /ingestions/{id}/confirm`, which creates the final transaction in the main Finance API and marks the ingestion as `Committed`.
+  1. **Receive:** A mobile notification payload is `POST`ed to `/phone_hook` (API key protected) and saved to the `PhoneHookMessages` CosmosDB container with `status = "received"`.
+  2. **Classify:** A Cosmos DB Change Feed trigger fires. The pipeline first runs a lightweight Gemini check (`is_financial_transaction_async`) to skip non-financial notifications (`status = "NonFinancial"`, TTL = 7 days). For financial ones, it embeds the raw text via Gemini `text-embedding-004`, retrieves top-5 similar past transactions via cosine similarity, fetches accounts and the RUNBOOK.md, then calls Gemini for structured classification into an `AiParsedData` result.
+  3. **Vendor Matching:** After classification, the ingester checks `VendorLookups` for a match using `recipient_account_name`, `recipient_account_number`, `sender_account_name`, `sender_account_number`, `vendor`, and `application` as lookup keys, ranked by cumulative `Hits`. If no lookup match, a new vendor is auto-created if the AI confidence is ≥ threshold.
+  4. **Auto-Confirm:** If the top similarity score ≥ `AUTO_CONFIRM_THRESHOLD` (default `0.92`) and all account IDs are resolved, the transaction is created immediately via the Finance API (`status = "AutoConfirmed"`) and the vector embedding is learned.
+  5. **Pending Review:** Otherwise the ingestion remains `status = "Pending"` for user review.
+  6. **User Actions:** The user can review via `GET /ingestions`, quick-confirm via `POST /ingestions/{id}/confirm-status`, edit & confirm via the `AddTransactionModal` (pre-filled from AI data), reject via `POST /ingestions/{id}/reject`, or reclassify via `POST /ingestions/{id}/reclassify`. Vendor can be patched inline via `PATCH /ingestions/{id}/vendor`.
+  7. **Learn:** On confirmation, `POST /ingestions/{id}/learn` embeds the confirmed transaction and stores a `TransactionVector` for future similarity lookups.
+  8. **Historical Import:** `GET /historical-hooks` and `POST /historical-hooks/{id}/import` allow migrating past notifications from a legacy CosmosDB database into the new pipeline.
 
 ### 2.5. Monthly Transaction List View
 - Chronological log of financial activity for a calendar month, accessed via the **Daily tab** (default) inside the Transactions page.
@@ -105,9 +112,12 @@ Users need a structured way to mirror their real-world financial accounts within
 - **Testing:** `backend.Tests` xUnit project utilizing `Moq` for unit testing service business logic and `System.Text.Json` model serialization.
 
 ### 4.3 Frontend Design (React + Vite)
-- **Data Fetching:** Axios instance with interceptors for authentication (OAuth) and global error handling. State management via `@tanstack/react-query` for caching and synchronization.
+- **Data Fetching:** Two Axios instances:
+  - `apiClient` — calls the .NET Finance API. Uses a request interceptor to attach the Bearer JWT token retrieved via `getUserManager()` from `@adolf94/ar-auth-client`.
+  - `ingesterClient` (`src/lib/ingesterClient.ts`) — calls the Python `notif-ingester` directly. Uses the same JWT Bearer token from `getUserManager()` with localStorage OIDC key fallback.
+- **Runtime Configuration:** Auth and API config loaded dynamically from `/authConfig/config.js` (injected at deploy time) with `import.meta.env` fallback for local dev.
 - **Routing:** `@tanstack/router` for type-safe navigation.
-- **Development Standard:** No direct fetch. All network requests MUST go through the configured Axios instance. Logic and UI separated. Hooks used for data retrieval using React Query.
+- **Development Standard:** No direct fetch. All network requests MUST go through the configured Axios instance (`apiClient` or `ingesterClient`). Logic and UI separated. Hooks used for data retrieval using React Query.
 - **Testing:** Vitest and React Testing Library utilized for verifying React Query custom hooks (`useTransactions`, etc.) and component interactions via mocked API clients.
 - **Key Components:**
   - `Settings.tsx` (`pages/`) — Tabbed configuration area for manual management of Categories (Expense/Income groups) and Vendors, keeping the main Accounts view decluttered.
@@ -116,6 +126,17 @@ Users need a structured way to mirror their real-world financial accounts within
   - `CalendarView.tsx` (`pages/`) — 42-cell (6×7) calendar grid. Accepts `transactions[]` and `accounts[]` as props (already fetched by the parent). Computes per-day income/expense summaries using the account-type driven rule (see §2.6). Opens `DayModal` on day tap.
   - `DayModal.tsx` (`components/`) — Bottom-sheet modal displaying day-level Income/Expense/Net summary chips and a scrollable transaction list for the selected date.
   - `CategoryDetails.tsx` (`pages/`) — Detail page displaying category group name, type, and transaction list grouped by date.
+  - `PendingIngestions.tsx` (`pages/`) — Page rendering `PendingIngestionsList`. Accessible from the bottom navigation.
+  - `PendingIngestionsList.tsx` (`components/`) — Reviews AI-classified ingestions. Supports: quick-confirm, edit-and-confirm (opens `AddTransactionModal` pre-filled from AI data), reject, vendor inline patch, and suggested account creation with AI-generated descriptions.
+  - `HistoricalHooksList.tsx` (`components/`) — Lists legacy notifications from the old CosmosDB. Supports per-item import (triggers the full classify pipeline) and ignore actions.
+  - `EditAccountModal.tsx` (`components/`) — Modal for editing existing accounts (name, description, group, starting balance, credit card fields).
+  - `TransactionCard.tsx` (`components/`) — Reusable component for rendering a single transaction row.
+  - `PendingIngestionCard.tsx` (`components/`) — Reusable component for rendering a pending AI-classified ingestion item.
+  - `RunbookReviewModal.tsx` (`components/`) — Modal for interactively reviewing and chatting with AI to apply suggested `RUNBOOK.md` corrections.
+  - `DiffViewer.tsx` (`components/`) — Visualizer for displaying text differences in runbook updates.
+- **Key Hooks:**
+  - `useIngestions.ts` — `useGetPendingIngestions`, `useConfirmIngestion`, `useRejectIngestion`, `useUpdateIngestionVendor`, `useGenerateAccountDescription`, `useReclassifyIngestion`. All use `ingesterClient`.
+  - `useRunbookReview.ts` — `useGetRunbookCorrections`, `useStartRunbookReview`, `useChatRunbookReview`, `useApproveRunbookReview`. Uses `pythonApiClient`.
 - **Account Interface (`useAccounts.ts`):** The `Account.accountType` field uses the full enum union matching the backend: `'Cash' | 'Bank' | 'CreditCard' | 'Investment' | 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense' | 'Adjustment'`. This is required for the calendar to identify income/expense accounts during per-day aggregation.
 
 ### 4.4 API Design Guidelines
@@ -126,21 +147,44 @@ Users need a structured way to mirror their real-world financial accounts within
 
 ### 4.5 Notification Ingester (Python Azure Functions)
 - **Language & Runtime:** Python 3.11+, Azure Functions v2 programming model (`azure-functions`).
+- **Authentication:**
+  - `POST /phone_hook` — API key protected (`x-api-key` header vs. `API_KEY` env var).
+  - All other endpoints — JWT Bearer validated via `ArAuthClient` from `ar_auth` package (JWKS cached, authority: `https://auth.adolfrey.com/api`).
 - **Dependency Injection:** Manual factory functions (`get_hook_service()`, `get_ingestion_service()`) compose services in `function_app.py`.
 - **Service Layer:**
   - `HookService` — Validates and persists incoming `PhoneHookMessage` to CosmosDB.
   - `EmbeddingService` — Calls Google Gemini `text-embedding-004` to produce a 768-dimension float vector from notification text.
   - `VectorService` — Performs cosine-similarity search (via `numpy`) across all stored `TransactionVector` documents for a user to retrieve top-k matches.
-  - `AiService` — Sends the notification, similar transactions, and RUNBOOK.md rules to Gemini for structured JSON classification (`AiParsedData`: vendor, amount, type, debit/credit account IDs, category, confidence).
-  - `FinanceApiService` — Calls the main .NET Finance API to create confirmed transactions.
-  - `IngestionService` — Orchestrates the full pipeline: embed → retrieve → classify → store `PendingIngestion`.
+  - `AiService` — Two-stage Gemini calls: (1) `is_financial_transaction_async` — lightweight check to filter non-financial notifications; (2) `classify_async` — full structured JSON classification with notification + similar transactions + accounts + RUNBOOK.md context. Produces `AiParsedData` with enhanced fields: `vendor`, `amount`, `transaction_type`, `debit_account_id`, `credit_account_id`, `suggested_account_creation`, `notes`, `confidence`, `recipient_account_number/name`, `sender_account_number/name`, `application`, `why`, `user_why`, `is_financial`, `is_auto_confirmed`, `vendor_matched`.
+  - `FinanceApiService` — Directly queries CosmosDB containers (`Accounts`, `AccountGroups`, `Vendors`, `VendorLookups`) to resolve accounts and vendors. Creates confirmed transactions by writing directly to the `Transactions` container. Methods include `get_accounts_async`, `search_vendors_by_lookups_async`, `ensure_vendor_and_lookups_async`, `create_transaction_async`, `get_runbook_content_async`.
+  - `IngestionService` — Orchestrates the full pipeline: financial-check → embed → vector-search → fetch-accounts+runbook → classify → vendor-match → auto-confirm-or-pending → save.
+- **HTTP Endpoints (`function_app.py`):**
+  - `POST /phone_hook` — Receive raw notification, API key auth.
+  - `GET /ingestions` — List ingestions by status (default `Pending`), JWT auth.
+  - `POST /ingestions/{id}/confirm-status` — Mark as `Confirmed`, record `transaction_id`, trigger learn, JWT auth.
+  - `POST /ingestions/{id}/reject` — Mark as `Rejected`, JWT auth.
+  - `POST /ingestions/{id}/learn` — Embed and store `TransactionVector` for a confirmed ingestion, JWT auth.
+  - `POST /ingestions/{id}/reclassify` — Re-run full AI classification pipeline, JWT auth.
+  - `PATCH /ingestions/{id}/vendor` — Patch vendor name and set `vendor_matched = true`, JWT auth.
+  - `POST /ingestions/classify-hook` — Synchronous classification (no Change Feed), JWT auth.
+  - `POST /accounts/generate-description` — Generate an AI account description, JWT auth.
+  - `GET /historical-hooks` — Fetch legacy hook messages from old CosmosDB (`OldCosmosConnectionString`), JWT auth.
+  - `POST /historical-hooks/{id}/import` — Map old schema → `PhoneHookMessage`, upsert to new DB, classify synchronously, JWT auth.
+  - `POST /historical-hooks/{id}/ignore` — Mark old hook as `Ignored` in legacy DB, JWT auth.
+  - `GET /runbook/corrections` — Fetch AI-suggested runbook mapping corrections, JWT auth.
+  - `POST /runbook/review/start` — Start a runbook review session, JWT auth.
+  - `POST /runbook/review/chat` — Chat with AI to iteratively refine the proposed runbook changes, JWT auth.
+  - `POST /runbook/review/approve` — Approve and save the reviewed runbook to Cosmos DB, JWT auth.
+- **Auto-Confirm Threshold:** Configurable via `AUTO_CONFIRM_THRESHOLD` env var (default `0.92`). When top cosine similarity score ≥ threshold and all account IDs are present, transactions are created automatically (`AutoConfirmed`).
 - **Key Models (Pydantic):**
-  - `PhoneHookMessage` — Raw notification payload (`action`, `raw_msg`, `status`, `month_key`, `partition_key`). Includes a `_ttl` of 60 days for auto-expiry.
-  - `PendingIngestion` — AI classification result document with `AiParsedData`, `top_matches`, `similarity_score`, `status` (`Pending` → `Committed`/`Rejected`).
-  - `TransactionVector` — Persisted embedding document used for future similarity lookups.
+  - `PhoneHookMessage` — Raw notification payload (`id`, `UserId`, `action`, `raw_msg`, `raw_payload`, `status`, `month_key`, `partition_key`, `received_at`). Includes a `_ttl` of 60 days for auto-expiry.
+  - `PendingIngestion` — AI classification result with `AiParsedData`, `top_matches`, `similarity_score`, `status` (`Pending` | `AutoConfirmed` | `Confirmed` | `Rejected` | `NonFinancial`), `transaction_id`, `user_confirmed`, `month_key`, `partition_key`.
+  - `AiParsedData` — Full structured AI output (see AiService above). Synced as a C# class (`backend/Models/AiParsedData.cs`) via the `model-syncer` skill.
+  - `TransactionVector` — Persisted embedding document (`id`, `UserId`, `transaction_id`, `vendor`, `category`, `summary`, `embed_text`, `embedding`, `debit_account_id`, `credit_account_id`, `confirmed_at`, `partition_key`). Synced as a C# class (`backend/Models/TransactionVector.cs`).
 - **CosmosDB Containers:**
-  - `PhoneHookMessages` (`/partition_key`) — Raw incoming hook documents with Change Feed trigger and lease container.
+  - `PhoneHookMessages` (`/partition_key`) — Raw incoming hook documents with Change Feed trigger and `PhoneHookMessages-leases` lease container.
   - `PendingIngestions` (`/partition_key`) — AI-classified transaction proposals awaiting user confirmation.
   - `TransactionVectors` (`/userId`) — Historical embeddings indexed for similarity retrieval.
-- **RUNBOOK.md:** A human-editable markdown file read at classification time. Defines explicit vendor→category→type overrides that take precedence over AI inference.
-- **API Key Auth:** All HTTP endpoints require `x-api-key` header matching the `API_KEY` environment variable.
+  - `VendorLookups` (`/UserId`) — Lookup strings (account numbers, names, app identifiers) mapped to `VendorId` with a `Hits` counter for frequency-weighted matching. Managed by both .NET (`VendorLookup.cs`, `VendorRepository`) and Python (`FinanceApiService.ensure_vendor_and_lookups_async`).
+- **RUNBOOK.md:** A human-editable markdown file stored in CosmosDB (fetched via `FinanceApiService.get_runbook_content_async`). Defines explicit vendor→category→type overrides that take precedence over AI inference.
+- **Model Sync:** The `model-syncer` skill (`scripts/sync_check.py`) validates that Python Pydantic models and C# classes remain in sync. Key synced pairs: `AiParsedData`, `TransactionVector`.

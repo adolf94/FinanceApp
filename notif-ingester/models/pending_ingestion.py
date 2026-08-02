@@ -13,6 +13,7 @@ class AiParsedData(BaseModel):
     credit_account_id: Optional[str] = None
     suggested_account_creation: Optional[List[dict]] = None
     notes: Optional[str] = None
+    summary: Optional[str] = None
     confidence: Optional[float] = None
     recipient_account_number: Optional[str] = None
     recipient_account_name: Optional[str] = None
@@ -23,6 +24,8 @@ class AiParsedData(BaseModel):
     user_why: Optional[str] = None
     vendor_matched: Optional[bool] = False
     is_auto_confirmed: Optional[bool] = False
+    ingestion_id: Optional[str] = None
+    date: Optional[datetime] = None
 
 class SuggestedAccountCreation(BaseModel):
     type: Optional[str] = None
@@ -47,6 +50,7 @@ class PendingIngestion(BaseModel):
     month_key: str
     partition_key: str
     ttl: Optional[int] = Field(default=None, alias="_ttl")
+    runbook_synced: bool = False
 
     class Config:
         populate_by_name = True

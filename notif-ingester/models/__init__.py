@@ -8,6 +8,7 @@ from models.vendor import Vendor
 from models.ledger_entry import LedgerEntry
 from models.transaction import Transaction
 from models.recurring_transaction import RecurringTransaction, RecurringLedgerEntry, RecurringTransactionOccurrence
+from models.runbook_review_session import RunbookReviewSession, ChatMessage
 
 __all__ = [
     "AccountType",
@@ -24,5 +25,7 @@ __all__ = [
     "Transaction",
     "RecurringTransaction",
     "RecurringLedgerEntry",
-    "RecurringTransactionOccurrence"
+    "RecurringTransactionOccurrence",
+    "RunbookReviewSession",
+    "ChatMessage"
 ]

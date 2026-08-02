@@ -29,17 +29,16 @@ export default function HistoricalHooksList() {
               transaction_type: data.ai_parsed.transaction_type,
               debit_account_id: data.ai_parsed.debit_account_id,
               credit_account_id: data.ai_parsed.credit_account_id,
-              notes: data.ai_parsed.notes || data.raw_msg,
+              notes: data.ai_parsed.summary || data.ai_parsed.notes || '',
               user_why: null
             }
           }, {
             onSettled: () => setProcessingIds(prev => prev.filter(id => id !== hookId)),
             onError: () => {
-              alert('Failed to auto-confirm transaction. It is now in your Review Queue.')
+              // Silently fail the auto-confirm, it stays in review queue
             }
           })
         } else {
-          alert('Imported to Review Queue (missing account fields to auto-create transaction).')
           setProcessingIds(prev => prev.filter(id => id !== hookId))
         }
       },
@@ -73,7 +72,7 @@ export default function HistoricalHooksList() {
     if (pkgLower.includes('gcash')) return 'GCash'
     if (pkgLower.includes('bpi') || pkgLower.includes('indivara')) return 'BPI'
     if (pkgLower.includes('maya')) return 'Maya'
-    return resolvedPkg.split('.').pop() ?? 'App'
+    return resolvedPkg || 'App'
   }
 
   if (isLoading) {

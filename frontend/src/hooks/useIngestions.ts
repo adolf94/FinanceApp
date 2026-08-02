@@ -17,6 +17,7 @@ export interface AiParsedData {
     reason: string
   }> | null
   notes?: string | null
+  summary?: string | null
   confidence?: number | null
   recipient_account_number?: string | null
   recipient_account_name?: string | null
@@ -57,6 +58,17 @@ export function useGetPendingIngestions(status: string = 'Pending') {
   })
 }
 
+export function useGetIngestionById(id?: string | null) {
+  return useQuery<PendingIngestion>({
+    queryKey: ['ingestion', id],
+    queryFn: async () => {
+      const response = await ingesterClient.get(`/ingestions/${id}`)
+      return response.data
+    },
+    enabled: !!id,
+  })
+}
+
 export function useConfirmIngestion() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -64,7 +76,9 @@ export function useConfirmIngestion() {
       // Step 1: Create transaction in C#
       let txId = transactionId;
       if (!txId) {
-        const response = await apiClient.post(`/transactions/from-ingestion`, userConfirmed)
+        // Pass ingestionId so it gets saved in Transaction.cs
+        const payload = { ...userConfirmed, ingestion_id: id }
+        const response = await apiClient.post(`/transactions/from-ingestion`, payload)
         txId = response.data.id
       }
       
@@ -80,6 +94,15 @@ export function useConfirmIngestion() {
       queryClient.invalidateQueries({ queryKey: ['pendingIngestions'] })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    }
+  })
+}
+
+export function useLearnIngestion() {
+  return useMutation({
+    mutationFn: async ({ id, userConfirmed }: { id: string; userConfirmed: Partial<AiParsedData> }) => {
+      const response = await ingesterClient.post(`/ingestions/${id}/learn`, userConfirmed)
+      return response.data
     }
   })
 }
@@ -184,3 +207,16 @@ export function useIgnoreHistoricalHook() {
   })
 }
 
+export function useGenerateAccountDescription() {
+  return useMutation({
+    mutationFn: async ({ accountName, accountType, groupName, context }: { accountName: string, accountType: string, groupName: string, context?: string }) => {
+      const response = await ingesterClient.post('/accounts/generate-description', {
+        account_name: accountName,
+        account_type: accountType,
+        group_name: groupName,
+        context: context || ""
+      })
+      return response.data as { description: string }
+    }
+  })
+}

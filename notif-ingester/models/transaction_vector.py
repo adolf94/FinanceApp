@@ -10,6 +10,7 @@ class TransactionVector(BaseModel):
     transaction_id: str
     vendor: str
     category: str
+    summary: str = ""
     debit_account_id: str
     credit_account_id: str
     embed_text: str
